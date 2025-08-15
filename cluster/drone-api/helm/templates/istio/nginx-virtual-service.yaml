@@ -1,0 +1,19 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: nginx
+  namespace: {{ .Values.namespace }}
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - drone-api-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /*
+    route:
+    - destination:
+        host: {{.Values.fullnameOverride}}
+        port:
+          number: 8000
