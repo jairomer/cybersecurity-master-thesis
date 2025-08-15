@@ -1,0 +1,37 @@
+openapi: 3.0.0
+info:
+  version: 1.0.0
+  title: Hello World
+paths:
+  /hello/world:
+    get:
+      summary: Get a hello world
+      operationId: getHelloWorld
+      description: Returns hello world.
+      parameters:
+        - name: country
+          in: query
+          description: Where to say hello to
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A hello world or hello to a country.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelloWorldResponse'
+components:
+  schemas:
+    HelloWorldResponse:
+      type: object
+      properties:
+        hello:
+          type: string
+        country:
+          type: string
+      required:
+      - hello
+      - country
+
