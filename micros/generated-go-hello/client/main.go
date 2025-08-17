@@ -11,13 +11,46 @@ import (
 
 func main() {
 	hc := http.Client{}
+
+	authToken := ""
 	{
 		c, err := client.NewClient("http://localhost:8000", client.WithHTTPClient(&hc))
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		resp, err := c.GetHelloWorld(context.TODO(), &client.GetHelloWorldParams{})
+		user := client.LoginJSONRequestBody{User: "test", Password: "test"}
+		resp, err := c.Login(context.TODO(), user)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if resp.StatusCode == 200 {
+			loginRes, err := client.ParseLoginResponse(resp)
+			if err != nil {
+				log.Fatal(err)
+			}
+			authToken = loginRes.JSON200.Token
+		} else {
+			log.Fatalf("Authentication failed: %s", resp.Status)
+			return
+		}
+	}
+
+	{
+		c, err := client.NewClient("http://localhost:8000", client.WithHTTPClient(&hc))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		resp, err := c.GetHelloWorld(
+			context.TODO(),
+			&client.GetHelloWorldParams{},
+			func(ctx context.Context, req *http.Request) error {
+				req.Header.Add("Authorization", "Bearer "+authToken)
+				return nil
+			})
+
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -40,7 +73,11 @@ func main() {
 		}
 		country := "Spain"
 		params := client.GetHelloWorldParams{Country: &country}
-		resp, err := c.GetHelloWorld(context.TODO(), &params)
+		resp, err := c.GetHelloWorld(context.TODO(), &params,
+			func(ctx context.Context, req *http.Request) error {
+				req.Header.Add("Authorization", "Bearer "+authToken)
+				return nil
+			})
 		if err != nil {
 			log.Fatal(err)
 		}

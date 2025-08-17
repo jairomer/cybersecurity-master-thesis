@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  version: 1.0.0
+  version: 1.1.0
   title: Hello World
 paths:
   /hello/world:
@@ -8,6 +8,8 @@ paths:
       summary: Get a hello world
       operationId: getHelloWorld
       description: Returns hello world.
+      security:
+        - bearerAuth: [] # Require JWT
       parameters:
         - name: country
           in: query
@@ -22,8 +24,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HelloWorldResponse'
+        '403':
+          description: Unauthorized 
+  /login:
+    post:
+      summary: Receive user/password pair for authentication
+      operationId: login
+      description: Authentication endpoint of the API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccess"
+        '403':
+          description: Unauthorized 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
+    UserLogin:
+      type: object
+      properties:
+        user:
+          type: string
+          example: Bob
+        password:
+          type: string
+          example: Passw0rd!
+      required:
+        - user
+        - password
     HelloWorldResponse:
       type: object
       properties:
@@ -34,4 +75,11 @@ components:
       required:
       - hello
       - country
-
+    LoginSuccess:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT access token
+      required:
+        - token

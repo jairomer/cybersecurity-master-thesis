@@ -14,23 +14,45 @@ import (
 	strictecho "github.com/oapi-codegen/runtime/strictmiddleware/echo"
 )
 
+const (
+	BearerAuthScopes = "bearerAuth.Scopes"
+)
+
 // HelloWorldResponse defines model for HelloWorldResponse.
 type HelloWorldResponse struct {
 	Country string `json:"country"`
 	Hello   string `json:"hello"`
 }
 
+// LoginSuccess defines model for LoginSuccess.
+type LoginSuccess struct {
+	// Token JWT access token
+	Token string `json:"token"`
+}
+
+// UserLogin defines model for UserLogin.
+type UserLogin struct {
+	Password string `json:"password"`
+	User     string `json:"user"`
+}
+
 // GetHelloWorldParams defines parameters for GetHelloWorld.
 type GetHelloWorldParams struct {
-	// Country Country to say hello to
+	// Country Where to say hello to
 	Country *string `form:"country,omitempty" json:"country,omitempty"`
 }
+
+// LoginJSONRequestBody defines body for Login for application/json ContentType.
+type LoginJSONRequestBody = UserLogin
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Get a hello world
 	// (GET /hello/world)
 	GetHelloWorld(ctx echo.Context, params GetHelloWorldParams) error
+	// Receive user/password pair for authentication
+	// (POST /login)
+	Login(ctx echo.Context) error
 }
 
 // ServerInterfaceWrapper converts echo contexts to parameters.
@@ -41,6 +63,8 @@ type ServerInterfaceWrapper struct {
 // GetHelloWorld converts echo context to params.
 func (w *ServerInterfaceWrapper) GetHelloWorld(ctx echo.Context) error {
 	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetHelloWorldParams
@@ -53,6 +77,15 @@ func (w *ServerInterfaceWrapper) GetHelloWorld(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetHelloWorld(ctx, params)
+	return err
+}
+
+// Login converts echo context to params.
+func (w *ServerInterfaceWrapper) Login(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.Login(ctx)
 	return err
 }
 
@@ -85,6 +118,7 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	}
 
 	router.GET(baseURL+"/hello/world", wrapper.GetHelloWorld)
+	router.POST(baseURL+"/login", wrapper.Login)
 
 }
 
@@ -105,11 +139,47 @@ func (response GetHelloWorld200JSONResponse) VisitGetHelloWorldResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetHelloWorld403Response struct {
+}
+
+func (response GetHelloWorld403Response) VisitGetHelloWorldResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
+type LoginRequestObject struct {
+	Body *LoginJSONRequestBody
+}
+
+type LoginResponseObject interface {
+	VisitLoginResponse(w http.ResponseWriter) error
+}
+
+type Login200JSONResponse LoginSuccess
+
+func (response Login200JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type Login403Response struct {
+}
+
+func (response Login403Response) VisitLoginResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Get a hello world
 	// (GET /hello/world)
 	GetHelloWorld(ctx context.Context, request GetHelloWorldRequestObject) (GetHelloWorldResponseObject, error)
+	// Receive user/password pair for authentication
+	// (POST /login)
+	Login(ctx context.Context, request LoginRequestObject) (LoginResponseObject, error)
 }
 
 type StrictHandlerFunc = strictecho.StrictEchoHandlerFunc
@@ -143,6 +213,35 @@ func (sh *strictHandler) GetHelloWorld(ctx echo.Context, params GetHelloWorldPar
 		return err
 	} else if validResponse, ok := response.(GetHelloWorldResponseObject); ok {
 		return validResponse.VisitGetHelloWorldResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// Login operation middleware
+func (sh *strictHandler) Login(ctx echo.Context) error {
+	var request LoginRequestObject
+
+	var body LoginJSONRequestBody
+	if err := ctx.Bind(&body); err != nil {
+		return err
+	}
+	request.Body = &body
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.Login(ctx.Request().Context(), request.(LoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "Login")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(LoginResponseObject); ok {
+		return validResponse.VisitLoginResponse(ctx.Response())
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
 	}
