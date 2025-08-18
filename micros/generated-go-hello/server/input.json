@@ -1,0 +1,16 @@
+{
+  "access_control": {
+    "users": {
+      "test1": {
+        "acl": ["/hello/world"]
+      },
+      "test2": {
+        "acl": []
+      }
+    }
+  },
+  "jwt": {
+    "aud": "test1"
+  },
+  "uri": "/hello/world"
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 
 	echojwt "github.com/labstack/echo-jwt"
 	"github.com/labstack/echo/v4"
@@ -23,12 +24,31 @@ func main() {
 			return false
 		},
 		SuccessHandler: func(c echo.Context) {
-			log.Println("Request authenticated, authorizing...")
-			// TODO: Verify rego rules here
+			log.Printf("JWT Authentication successful on: %s\n", c.Request().URL)
 		},
 		SigningKey: []byte(api.SecretKey),
 	}
 
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		// This is to be executed after the jwt is verified to be valid.
+		return func(c echo.Context) error {
+			if c.Request().URL.Path == "/login" {
+				// Avoid authorization if /login
+				return next(c)
+			}
+			authorized, err := api.Authorize(c)
+			if err != nil {
+				log.Println(err)
+				return echo.NewHTTPError(http.StatusInternalServerError)
+			}
+			if !authorized {
+				log.Printf("Unauthorized request on %s\f", c.Request().RequestURI)
+				return echo.NewHTTPError(http.StatusForbidden)
+			}
+			// Authorized
+			return next(c)
+		}
+	})
 	e.Use(echojwt.WithConfig(jwtconfig))
 
 	api.RegisterHandlers(e, api.NewStrictHandler(
