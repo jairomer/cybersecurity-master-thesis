@@ -7,7 +7,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/labstack/echo/v4"
-	"github.com/open-policy-agent/opa/rego"
+
+	"github.com/open-policy-agent/opa/v1/rego"
 )
 
 const (
