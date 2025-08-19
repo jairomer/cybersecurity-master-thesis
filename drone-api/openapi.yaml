@@ -1,0 +1,187 @@
+openapi: 3.0.0
+info:
+  version: 1.0.0
+  title: Drone Telemetry API
+paths:
+  /login:
+    post:
+      summary: Present user credentials for authentication receive a JWT for per-request authn.
+      operationId: login
+      description: User and password authentication endpoint for the Drone Telemetry API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSuccess'
+        '401':
+          description: Forbidden Access
+
+  /battlefield:
+    get:
+      summary: Receive battlefield data according to caller's identity.
+      operationId: GetBattlefieldData
+      security:
+        - bearerAuth: []
+      description: >
+        Returns a list of drones with their respective IDs and coordinates, according to the
+        access permissions of the caller and their specific identity.
+      responses:
+        '200': 
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BattlefieldData'
+        '403':
+          description: Forbidden Access
+
+  /battlefield/drone/{droneid}/target:
+    post:
+      summary: A pilot will set a new target location to a drone under its command.
+      operationId: SetTargetLocation
+      parameters:
+        - name: droneid
+          in: path
+          required: true         # path params MUST be required
+          schema:
+            type: string
+            example: drone-34
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Coordinate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DroneData'
+        '403':
+          description: Forbidden Access or Not Found
+
+  /battlefield/provision:
+    post:
+      summary: An officer will use this endpoint to provision resources for a battlefield.
+      operationId: BattlefieldProvision
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BattlefieldProvision'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BattlefieldData'
+        '403':
+          description: Forbidden Access
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    UserLogin:
+      type: object
+      properties:
+        user:
+          type: string
+          example: Bob
+        password:
+          type: string
+          example: Passw0rd!
+      required:
+        - user
+        - password
+    LoginSuccess:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT Access Token
+      required:
+        - token
+    BattlefieldData:
+      type: object
+      properties:
+        drones:
+          type: array
+          items:
+            $ref: '#/components/schemas/DroneData'
+    DroneData:
+      type: object
+      properties:
+        id:
+          type: string
+          example: drone-x
+        location:
+          $ref: '#/components/schemas/Coordinate'
+        target:
+          $ref: '#/components/schemas/Coordinate'
+      required:
+        - id
+        - location
+        - target
+    Coordinate:
+      type: object
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude: 
+          type: number
+          format: double
+        altitude: 
+          type: number
+          format: double
+      required:
+        - latitude
+        - longitude
+        - altitude
+    BattlefieldProvision:
+      type: object
+      properties:
+        credentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLogin'
+        pilots:
+          type: array
+          items:
+            $ref: '#/components/schemas/PilotProvisioning'
+      required:
+        - credentials
+        - pilots
+    PilotProvisioning:
+      type: object
+      properties:
+        id: 
+          type: string
+          example: pilot-x
+        drones:
+          type: array
+          items:
+            $ref: '#/components/schemas/DroneData'
+      required:
+        - id
+        - drones

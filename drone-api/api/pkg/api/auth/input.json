@@ -1,0 +1,18 @@
+{
+  "battlefield_auth": {
+    "pilots": [
+	{
+	  "id": "pilot-1",
+	  "drones": [ "drone-1", "drone-2", "drone-3" ]
+	},
+	{
+	  "id": "pilot-2",
+	  "drones": [ "drone-4", "drone-5", "drone-6"]
+	}
+    ]
+  },
+  "request": {
+    "pilot": "pilot-2",
+    "drone": "drone-2"
+  }
+}
