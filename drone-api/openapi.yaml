@@ -93,6 +93,8 @@ paths:
                 $ref: '#/components/schemas/BattlefieldData'
         '403':
           description: Forbidden Access
+        '400':
+          description: Bad Request
 
 components:
   securitySchemes:
@@ -128,6 +130,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DroneData'
+      required:
+        - drones
     DroneData:
       type: object
       properties:
@@ -164,7 +168,7 @@ components:
         credentials:
           type: array
           items:
-            $ref: '#/components/schemas/UserLogin'
+            $ref: '#/components/schemas/UserProvision'
         pilots:
           type: array
           items:
@@ -172,6 +176,20 @@ components:
       required:
         - credentials
         - pilots
+    UserProvision:
+      type: object
+      properties:
+        user:
+          type: string
+        password:
+          type: string
+        role: 
+          type: string
+          enum: ["officer", "pilot", "drone"]
+      required:
+        - user
+        - password
+        - role
     PilotProvisioning:
       type: object
       properties:

@@ -28,7 +28,7 @@ func populateAuthzData(ctx echo.Context, uri string, claims *JWTClaims) interfac
 					"acl": []string{"/hello/world"},
 				},
 				"test2": map[string]interface{}{
-					"acl": []string{},
+					"azcl": []string{},
 				},
 			},
 		},
@@ -67,7 +67,7 @@ func Authorize(ctx echo.Context) (bool, error) {
 		data := populateAuthzData(ctx, uri, claims)
 
 		query, err := rego.New(
-			rego.Query("data.example.authz.allow"),
+			rego.Query("data.battlefield.authz"),
 			rego.Load([]string{"./authz.rego"}, nil),
 		).PrepareForEval(ctx.Request().Context())
 		if err != nil {

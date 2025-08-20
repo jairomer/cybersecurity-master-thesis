@@ -18,14 +18,21 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for UserProvisionRole.
+const (
+	Drone   UserProvisionRole = "drone"
+	Officer UserProvisionRole = "officer"
+	Pilot   UserProvisionRole = "pilot"
+)
+
 // BattlefieldData defines model for BattlefieldData.
 type BattlefieldData struct {
-	Drones *[]DroneData `json:"drones,omitempty"`
+	Drones []DroneData `json:"drones"`
 }
 
 // BattlefieldProvision defines model for BattlefieldProvision.
 type BattlefieldProvision struct {
-	Credentials []UserLogin         `json:"credentials"`
+	Credentials []UserProvision     `json:"credentials"`
 	Pilots      []PilotProvisioning `json:"pilots"`
 }
 
@@ -60,6 +67,16 @@ type UserLogin struct {
 	Password string `json:"password"`
 	User     string `json:"user"`
 }
+
+// UserProvision defines model for UserProvision.
+type UserProvision struct {
+	Password string            `json:"password"`
+	Role     UserProvisionRole `json:"role"`
+	User     string            `json:"user"`
+}
+
+// UserProvisionRole defines model for UserProvision.Role.
+type UserProvisionRole string
 
 // SetTargetLocationJSONRequestBody defines body for SetTargetLocation for application/json ContentType.
 type SetTargetLocationJSONRequestBody = Coordinate
@@ -240,6 +257,14 @@ func (response BattlefieldProvision200JSONResponse) VisitBattlefieldProvisionRes
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
+}
+
+type BattlefieldProvision400Response struct {
+}
+
+func (response BattlefieldProvision400Response) VisitBattlefieldProvisionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
 }
 
 type BattlefieldProvision403Response struct {

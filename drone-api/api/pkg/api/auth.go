@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	// TODO: Get it from the environment.
 	SecretKey = "supersecretkey"
 )
 
@@ -18,8 +19,9 @@ func GenerateToken(username string) (string, error) {
 	claims := JWTClaims{
 		// We will keep claims encrypted
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "hello/world/server",
-			Audience:  jwt.ClaimStrings{username},
+			Issuer:    "uc3m.es/drone-api",
+			ID:        username,
+			Audience:  jwt.ClaimStrings{},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},

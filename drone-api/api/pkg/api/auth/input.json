@@ -1,5 +1,8 @@
 {
-  "battlefield_auth": {
+  "battlefield": {
+    "officers" : [
+	    { "id": "officer-1" }
+    ],
     "pilots": [
 	{
 	  "id": "pilot-1",
@@ -12,7 +15,9 @@
     ]
   },
   "request": {
-    "pilot": "pilot-2",
-    "drone": "drone-2"
+    "user": {
+	"id": "drone-4",
+	"role": "drone"
+    }
   }
 }
