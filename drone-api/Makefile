@@ -8,9 +8,11 @@ gen:
 	oapi-codegen --config=./clients/drone-cli/codegen.yaml openapi.yaml
 	oapi-codegen --config=./clients/pilot-cli/codegen.yaml openapi.yaml
 	oapi-codegen --config=./clients/officer-cli/codegen.yaml openapi.yaml
+	oapi-codegen --config=./clients/attacker-cli/codegen.yaml openapi.yaml
 
 build: 
 	cd api && go mod tidy && go build . 
 	cd clients && cd drone-cli && go mod tidy && go build . 
 	cd clients && cd pilot-cli && go mod tidy && go build . 
 	cd clients && cd officer-cli && go mod tidy && go build . 
+	cd clients && cd attacker-cli && go mod tidy && go build . 

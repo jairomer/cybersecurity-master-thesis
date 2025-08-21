@@ -1,0 +1,5 @@
+package: client
+output: clients/attacker-cli/api/client.gen.go
+generate:
+  models: true
+  client: true
