@@ -188,14 +188,13 @@ func main() {
 		log.Println(string(provResp.Body))
 	}
 	{
-		// TODO: Monitor all battlefield drones each 2 seconds
 		c, err := client.NewClient(droneapi, client.WithHTTPClient(&hc))
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		for {
-			//fmt.Print("\033[H\033[2J")
+			fmt.Print("\033[H\033[2J")
 			fmt.Printf("Monitoring battlefield as: %s", user.User)
 			resp, err := c.GetBattlefieldData(
 				context.TODO(),
