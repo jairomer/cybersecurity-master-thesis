@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -22,14 +24,26 @@ func addJwtHeader(token string) client.RequestEditorFn {
 	}
 }
 
+func moveDroneToTarget(dd *client.DroneData) {
+	dd.Target.Altitude = dd.Target.Altitude + float64(rand.IntN(100))
+	dd.Target.Longitude = dd.Target.Longitude + float64(rand.IntN(100))
+	dd.Target.Latitude = dd.Target.Latitude + float64(rand.IntN(100))
+}
+
 func main() {
 	fmt.Println("pilot-cli")
 
+	pilotId := "pilot-1"
+
+	pilotState := client.PilotProvisioning{
+		Id:     pilotId,
+		Drones: []client.DroneData{},
+	}
 	hc := http.Client{}
 	// TODO: Add  mtls certificate
 	authToken := ""
 	user := client.LoginJSONRequestBody{
-		User:     "pilot-1",
+		User:     pilotId,
 		Password: "test12!",
 	}
 
@@ -75,6 +89,27 @@ func main() {
 					log.Println(err)
 				} else {
 					log.Println(string(bdResp.Body))
+					battlefieldData := client.BattlefieldData{}
+					if json.Unmarshal(bdResp.Body, &battlefieldData) != nil {
+						log.Println("Invalid response from API")
+					} else {
+						pilotState.Drones = battlefieldData.Drones
+						if len(pilotState.Drones) == 0 {
+							log.Println("No drones assigned")
+						} else {
+							if rand.Float32() > 0.5 {
+								// Toss a coint, randomly give orders to one random drone.
+								droneToMove := rand.IntN(len(pilotState.Drones))
+								moveDroneToTarget(&pilotState.Drones[droneToMove])
+								c.SetTargetLocation(
+									context.TODO(),
+									pilotState.Drones[droneToMove].Id,
+									pilotState.Drones[droneToMove].Target,
+									addJwtHeader(authToken),
+								)
+							}
+						}
+					}
 				}
 			}
 			time.Sleep(2 * time.Second)

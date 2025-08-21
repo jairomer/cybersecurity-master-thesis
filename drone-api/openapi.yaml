@@ -43,6 +43,35 @@ paths:
         '403':
           description: Forbidden Access
 
+  /battlefield/drone/{droneid}/location:
+    post:
+      summary: A drone will send its current location to the API.
+      operationId: SetCurrentLocation
+      parameters:
+        - name: droneid
+          in: path
+          required: true         # path params MUST be required
+          schema:
+            type: string
+            example: drone-34
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Coordinate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DroneData'
+        '403':
+          description: Forbidden Access or Not Found
+
   /battlefield/drone/{droneid}/target:
     post:
       summary: A pilot will set a new target location to a drone under its command.

@@ -75,6 +75,27 @@ func (s *Server) GetBattlefieldData(ctx context.Context, request GetBattlefieldD
 	return GetBattlefieldData200JSONResponse{dd}, nil
 }
 
+func (s *Server) SetCurrentLocation(ctx context.Context, request SetCurrentLocationRequestObject) (SetCurrentLocationResponseObject, error) {
+	authzDecision, err := s.authorized(ctx)
+	if err != nil {
+		log.Printf("Error running authorization at %s by user %s", authzDecision.uri, authzDecision.user)
+		return SetCurrentLocation403Response{}, nil
+	}
+	if authzDecision.allowed {
+		for i, _ := range s.Pilots {
+			for j, _ := range s.Pilots[i].Drones {
+				if s.Pilots[i].Drones[j].Id == authzDecision.user {
+					s.Pilots[i].Drones[j].Location.Altitude = request.Body.Altitude
+					s.Pilots[i].Drones[j].Location.Latitude = request.Body.Latitude
+					s.Pilots[i].Drones[j].Location.Longitude = request.Body.Longitude
+					return SetCurrentLocation200JSONResponse(s.Pilots[i].Drones[j]), nil
+				}
+			}
+		}
+	}
+	return SetCurrentLocation403Response{}, nil
+}
+
 func (s *Server) SetTargetLocation(ctx context.Context, request SetTargetLocationRequestObject) (SetTargetLocationResponseObject, error) {
 	authzDecision, err := s.authorized(ctx)
 	if err != nil {
@@ -89,9 +110,9 @@ func (s *Server) SetTargetLocation(ctx context.Context, request SetTargetLocatio
 						// user of this endpoint is always a pilot.
 						for j, _ := range s.Pilots[i].Drones {
 							if s.Pilots[i].Drones[j].Id == request.Droneid {
-								s.Pilots[i].Drones[j].Location.Altitude = request.Body.Altitude
-								s.Pilots[i].Drones[j].Location.Latitude = request.Body.Latitude
-								s.Pilots[i].Drones[j].Location.Longitude = request.Body.Longitude
+								s.Pilots[i].Drones[j].Target.Altitude = request.Body.Altitude
+								s.Pilots[i].Drones[j].Target.Latitude = request.Body.Latitude
+								s.Pilots[i].Drones[j].Target.Longitude = request.Body.Longitude
 								return SetTargetLocation200JSONResponse(s.Pilots[i].Drones[j]), nil
 							}
 						}

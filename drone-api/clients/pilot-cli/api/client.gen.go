@@ -80,6 +80,9 @@ type UserProvision struct {
 // UserProvisionRole defines model for UserProvision.Role.
 type UserProvisionRole string
 
+// SetCurrentLocationJSONRequestBody defines body for SetCurrentLocation for application/json ContentType.
+type SetCurrentLocationJSONRequestBody = Coordinate
+
 // SetTargetLocationJSONRequestBody defines body for SetTargetLocation for application/json ContentType.
 type SetTargetLocationJSONRequestBody = Coordinate
 
@@ -165,6 +168,11 @@ type ClientInterface interface {
 	// GetBattlefieldData request
 	GetBattlefieldData(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// SetCurrentLocationWithBody request with any body
+	SetCurrentLocationWithBody(ctx context.Context, droneid string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SetCurrentLocation(ctx context.Context, droneid string, body SetCurrentLocationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SetTargetLocationWithBody request with any body
 	SetTargetLocationWithBody(ctx context.Context, droneid string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -183,6 +191,30 @@ type ClientInterface interface {
 
 func (c *Client) GetBattlefieldData(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetBattlefieldDataRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SetCurrentLocationWithBody(ctx context.Context, droneid string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetCurrentLocationRequestWithBody(c.Server, droneid, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SetCurrentLocation(ctx context.Context, droneid string, body SetCurrentLocationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetCurrentLocationRequest(c.Server, droneid, body)
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +320,53 @@ func NewGetBattlefieldDataRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewSetCurrentLocationRequest calls the generic SetCurrentLocation builder with application/json body
+func NewSetCurrentLocationRequest(server string, droneid string, body SetCurrentLocationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetCurrentLocationRequestWithBody(server, droneid, "application/json", bodyReader)
+}
+
+// NewSetCurrentLocationRequestWithBody generates requests for SetCurrentLocation with any type of body
+func NewSetCurrentLocationRequestWithBody(server string, droneid string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "droneid", runtime.ParamLocationPath, droneid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/battlefield/drone/%s/location", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -465,6 +544,11 @@ type ClientWithResponsesInterface interface {
 	// GetBattlefieldDataWithResponse request
 	GetBattlefieldDataWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBattlefieldDataResponse, error)
 
+	// SetCurrentLocationWithBodyWithResponse request with any body
+	SetCurrentLocationWithBodyWithResponse(ctx context.Context, droneid string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetCurrentLocationResponse, error)
+
+	SetCurrentLocationWithResponse(ctx context.Context, droneid string, body SetCurrentLocationJSONRequestBody, reqEditors ...RequestEditorFn) (*SetCurrentLocationResponse, error)
+
 	// SetTargetLocationWithBodyWithResponse request with any body
 	SetTargetLocationWithBodyWithResponse(ctx context.Context, droneid string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetTargetLocationResponse, error)
 
@@ -497,6 +581,28 @@ func (r GetBattlefieldDataResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetBattlefieldDataResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type SetCurrentLocationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DroneData
+}
+
+// Status returns HTTPResponse.Status
+func (r SetCurrentLocationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetCurrentLocationResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -578,6 +684,23 @@ func (c *ClientWithResponses) GetBattlefieldDataWithResponse(ctx context.Context
 	return ParseGetBattlefieldDataResponse(rsp)
 }
 
+// SetCurrentLocationWithBodyWithResponse request with arbitrary body returning *SetCurrentLocationResponse
+func (c *ClientWithResponses) SetCurrentLocationWithBodyWithResponse(ctx context.Context, droneid string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetCurrentLocationResponse, error) {
+	rsp, err := c.SetCurrentLocationWithBody(ctx, droneid, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetCurrentLocationResponse(rsp)
+}
+
+func (c *ClientWithResponses) SetCurrentLocationWithResponse(ctx context.Context, droneid string, body SetCurrentLocationJSONRequestBody, reqEditors ...RequestEditorFn) (*SetCurrentLocationResponse, error) {
+	rsp, err := c.SetCurrentLocation(ctx, droneid, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetCurrentLocationResponse(rsp)
+}
+
 // SetTargetLocationWithBodyWithResponse request with arbitrary body returning *SetTargetLocationResponse
 func (c *ClientWithResponses) SetTargetLocationWithBodyWithResponse(ctx context.Context, droneid string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetTargetLocationResponse, error) {
 	rsp, err := c.SetTargetLocationWithBody(ctx, droneid, contentType, body, reqEditors...)
@@ -645,6 +768,32 @@ func ParseGetBattlefieldDataResponse(rsp *http.Response) (*GetBattlefieldDataRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest BattlefieldData
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetCurrentLocationResponse parses an HTTP response from a SetCurrentLocationWithResponse call
+func ParseSetCurrentLocationResponse(rsp *http.Response) (*SetCurrentLocationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetCurrentLocationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DroneData
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

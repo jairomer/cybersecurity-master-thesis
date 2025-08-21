@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -22,15 +23,49 @@ func addJwtHeader(token string) client.RequestEditorFn {
 	}
 }
 
+func moveToTarget(dd *client.DroneData) {
+	if dd.Location.Altitude < dd.Target.Altitude {
+		dd.Location.Altitude += 50
+	} else if dd.Location.Altitude > dd.Target.Altitude {
+		dd.Location.Altitude -= 50
+	}
+
+	if dd.Location.Longitude < dd.Target.Longitude {
+		dd.Location.Longitude += 50
+	} else if dd.Location.Longitude > dd.Target.Longitude {
+		dd.Location.Longitude -= 50
+	}
+
+	if dd.Location.Latitude < dd.Target.Longitude {
+		dd.Location.Latitude += 50
+	} else if dd.Location.Latitude > dd.Target.Longitude {
+		dd.Location.Latitude -= 50
+	}
+}
+
+func inTargetLocation(dd *client.DroneData) bool {
+	return dd.Target.Altitude == dd.Location.Altitude &&
+		dd.Target.Latitude == dd.Location.Latitude &&
+		dd.Target.Longitude == dd.Location.Longitude
+}
+
 func main() {
+	droneid := "drone-1"
+
 	fmt.Println("drone-cli")
 
 	hc := http.Client{}
 	// TODO: Add  mtls certificate
 	authToken := ""
 	user := client.LoginJSONRequestBody{
-		User:     "drone-1",
+		User:     droneid,
 		Password: "test12!",
+	}
+
+	droneState := client.DroneData{
+		Id:       droneid,
+		Location: client.Coordinate{},
+		Target:   client.Coordinate{},
 	}
 
 	{
@@ -59,7 +94,6 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		for {
 			fmt.Print("\033[H\033[2J")
 			fmt.Printf("Monitoring battlefield as: %s", user.User)
@@ -75,8 +109,29 @@ func main() {
 					log.Println(err)
 				} else {
 					log.Println(string(bdResp.Body))
+					droneDataArr := client.BattlefieldData{}
+					if err := json.Unmarshal(bdResp.Body, &droneDataArr); err != nil {
+						log.Printf("Invalid response from API: %s\n", err.Error())
+					} else {
+						if len(droneDataArr.Drones) == 0 {
+							log.Println("Unauthorized access or undefined drone")
+						} else {
+							// In this client we are expecting only one drone.
+							droneState.Target = droneDataArr.Drones[0].Target
+						}
+					}
 				}
 			}
+
+			if !inTargetLocation(&droneState) {
+				moveToTarget(&droneState)
+				c.SetCurrentLocation(
+					context.TODO(),
+					droneState.Id,
+					droneState.Location,
+					addJwtHeader(authToken))
+			}
+
 			time.Sleep(2 * time.Second)
 		}
 	}

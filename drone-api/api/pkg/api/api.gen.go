@@ -78,6 +78,9 @@ type UserProvision struct {
 // UserProvisionRole defines model for UserProvision.Role.
 type UserProvisionRole string
 
+// SetCurrentLocationJSONRequestBody defines body for SetCurrentLocation for application/json ContentType.
+type SetCurrentLocationJSONRequestBody = Coordinate
+
 // SetTargetLocationJSONRequestBody defines body for SetTargetLocation for application/json ContentType.
 type SetTargetLocationJSONRequestBody = Coordinate
 
@@ -92,6 +95,9 @@ type ServerInterface interface {
 	// Receive battlefield data according to caller's identity.
 	// (GET /battlefield)
 	GetBattlefieldData(ctx echo.Context) error
+	// A drone will send its current location to the API.
+	// (POST /battlefield/drone/{droneid}/location)
+	SetCurrentLocation(ctx echo.Context, droneid string) error
 	// A pilot will set a new target location to a drone under its command.
 	// (POST /battlefield/drone/{droneid}/target)
 	SetTargetLocation(ctx echo.Context, droneid string) error
@@ -116,6 +122,24 @@ func (w *ServerInterfaceWrapper) GetBattlefieldData(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetBattlefieldData(ctx)
+	return err
+}
+
+// SetCurrentLocation converts echo context to params.
+func (w *ServerInterfaceWrapper) SetCurrentLocation(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "droneid" -------------
+	var droneid string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "droneid", ctx.Param("droneid"), &droneid, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter droneid: %s", err))
+	}
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.SetCurrentLocation(ctx, droneid)
 	return err
 }
 
@@ -186,6 +210,7 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	}
 
 	router.GET(baseURL+"/battlefield", wrapper.GetBattlefieldData)
+	router.POST(baseURL+"/battlefield/drone/:droneid/location", wrapper.SetCurrentLocation)
 	router.POST(baseURL+"/battlefield/drone/:droneid/target", wrapper.SetTargetLocation)
 	router.POST(baseURL+"/battlefield/provision", wrapper.BattlefieldProvision)
 	router.POST(baseURL+"/login", wrapper.Login)
@@ -212,6 +237,32 @@ type GetBattlefieldData403Response struct {
 }
 
 func (response GetBattlefieldData403Response) VisitGetBattlefieldDataResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
+type SetCurrentLocationRequestObject struct {
+	Droneid string `json:"droneid"`
+	Body    *SetCurrentLocationJSONRequestBody
+}
+
+type SetCurrentLocationResponseObject interface {
+	VisitSetCurrentLocationResponse(w http.ResponseWriter) error
+}
+
+type SetCurrentLocation200JSONResponse DroneData
+
+func (response SetCurrentLocation200JSONResponse) VisitSetCurrentLocationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetCurrentLocation403Response struct {
+}
+
+func (response SetCurrentLocation403Response) VisitSetCurrentLocationResponse(w http.ResponseWriter) error {
 	w.WriteHeader(403)
 	return nil
 }
@@ -305,6 +356,9 @@ type StrictServerInterface interface {
 	// Receive battlefield data according to caller's identity.
 	// (GET /battlefield)
 	GetBattlefieldData(ctx context.Context, request GetBattlefieldDataRequestObject) (GetBattlefieldDataResponseObject, error)
+	// A drone will send its current location to the API.
+	// (POST /battlefield/drone/{droneid}/location)
+	SetCurrentLocation(ctx context.Context, request SetCurrentLocationRequestObject) (SetCurrentLocationResponseObject, error)
 	// A pilot will set a new target location to a drone under its command.
 	// (POST /battlefield/drone/{droneid}/target)
 	SetTargetLocation(ctx context.Context, request SetTargetLocationRequestObject) (SetTargetLocationResponseObject, error)
@@ -345,6 +399,37 @@ func (sh *strictHandler) GetBattlefieldData(ctx echo.Context) error {
 		return err
 	} else if validResponse, ok := response.(GetBattlefieldDataResponseObject); ok {
 		return validResponse.VisitGetBattlefieldDataResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// SetCurrentLocation operation middleware
+func (sh *strictHandler) SetCurrentLocation(ctx echo.Context, droneid string) error {
+	var request SetCurrentLocationRequestObject
+
+	request.Droneid = droneid
+
+	var body SetCurrentLocationJSONRequestBody
+	if err := ctx.Bind(&body); err != nil {
+		return err
+	}
+	request.Body = &body
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.SetCurrentLocation(ctx.Request().Context(), request.(SetCurrentLocationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetCurrentLocation")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(SetCurrentLocationResponseObject); ok {
+		return validResponse.VisitSetCurrentLocationResponse(ctx.Response())
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
 	}
