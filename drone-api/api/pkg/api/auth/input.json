@@ -16,8 +16,8 @@
   },
   "request": {
     "user": {
-	"id": "drone-4",
-	"role": "drone"
+	"id": "officer-1",
+	"role": "officer"
     }
   }
 }

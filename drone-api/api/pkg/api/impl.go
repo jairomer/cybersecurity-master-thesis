@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha512"
+	"fmt"
 	"log"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -17,6 +18,14 @@ type UserDatabase struct {
 	Officers map[string]string
 	Pilots   map[string]string
 	Drones   map[string]string
+}
+
+type AuthorizationDecision struct {
+	user    string
+	role    string
+	uri     string
+	drones  []string
+	allowed bool
 }
 
 type Server struct {
@@ -43,18 +52,18 @@ func NewServer() Server {
 }
 
 func (s *Server) GetBattlefieldData(ctx context.Context, request GetBattlefieldDataRequestObject) (GetBattlefieldDataResponseObject, error) {
-	userid, authz_drones, err := s.authorized(ctx)
-	if err != nil || userid == "" {
-		log.Printf("Error while processing user: %s", err.Error())
+	authzDecision, err := s.authorized(ctx)
+	if err != nil {
+		log.Printf("Error running authorization at %s by user %s", authzDecision.uri, authzDecision.user)
 		return GetBattlefieldData403Response{}, nil
 	}
-	if len(authz_drones) == 0 {
-		log.Printf("Unauthorized attempt at getting battlefield data by user %s\n", userid)
+
+	if !authzDecision.allowed {
+		log.Printf("Unauthorized access blocked at %s by user %s", authzDecision.uri, authzDecision.user)
 		return GetBattlefieldData403Response{}, nil
 	}
-	// Get the data for these drones.
 	dd := []DroneData{}
-	for _, droneid := range authz_drones {
+	for _, droneid := range authzDecision.drones {
 		for i, _ := range s.Pilots {
 			for _, drone := range s.Pilots[i].Drones {
 				if drone.Id == droneid {
@@ -67,35 +76,30 @@ func (s *Server) GetBattlefieldData(ctx context.Context, request GetBattlefieldD
 }
 
 func (s *Server) SetTargetLocation(ctx context.Context, request SetTargetLocationRequestObject) (SetTargetLocationResponseObject, error) {
-	userid, authz_drones, err := s.authorized(ctx)
-
-	if err != nil || userid == "" {
-		log.Printf("Unauthorized attempt at setting location for drone: %s\n", err.Error())
+	authzDecision, err := s.authorized(ctx)
+	if err != nil {
+		log.Printf("Error running authorization at %s by user %s", authzDecision.uri, authzDecision.user)
 		return SetTargetLocation403Response{}, nil
 	}
-	if len(authz_drones) == 0 {
-		log.Printf("Unauthorized attempt at setting location for drone '%s' by user '%s'\n", request.Droneid, userid)
-		return SetTargetLocation403Response{}, nil
-	}
-
-	for _, droneid := range authz_drones {
-		if droneid == request.Droneid {
-			for i, _ := range s.Pilots {
-				if s.Pilots[i].Id == userid {
-					// user is a defined pilot
-					for j, _ := range s.Pilots[i].Drones {
-						if s.Pilots[i].Drones[j].Id == request.Droneid {
-							s.Pilots[i].Drones[j].Location.Altitude = request.Body.Altitude
-							s.Pilots[i].Drones[j].Location.Latitude = request.Body.Latitude
-							s.Pilots[i].Drones[j].Location.Longitude = request.Body.Longitude
-							return SetTargetLocation200JSONResponse(s.Pilots[i].Drones[j]), nil
+	if authzDecision.allowed {
+		for _, droneid := range authzDecision.drones {
+			if droneid == request.Droneid {
+				for i, _ := range s.Pilots {
+					if s.Pilots[i].Id == authzDecision.user {
+						// user of this endpoint is always a pilot.
+						for j, _ := range s.Pilots[i].Drones {
+							if s.Pilots[i].Drones[j].Id == request.Droneid {
+								s.Pilots[i].Drones[j].Location.Altitude = request.Body.Altitude
+								s.Pilots[i].Drones[j].Location.Latitude = request.Body.Latitude
+								s.Pilots[i].Drones[j].Location.Longitude = request.Body.Longitude
+								return SetTargetLocation200JSONResponse(s.Pilots[i].Drones[j]), nil
+							}
 						}
 					}
 				}
 			}
 		}
 	}
-
 	return SetTargetLocation403Response{}, nil
 }
 
@@ -205,63 +209,60 @@ func (s *Server) Login(ctx context.Context, request LoginRequestObject) (LoginRe
 	return Login401Response{}, nil
 }
 
-func (s *Server) populateAuthzData(ctx context.Context, uri string, claims *JWTClaims) interface{} {
-	log.Printf("Authorizing: %s accessing %s\n", claims.ID, uri)
-	return `
-		{
-	  "battlefield": {
-	    "officers" : [
-		    { "id": "officer-1" }
-	    ],
-	    "pilots": [
-		{
-		  "id": "pilot-1",
-		  "drones": [ "drone-1", "drone-2", "drone-3" ]
-		},
-		{
-		  "id": "pilot-2",
-		  "drones": [ "drone-4", "drone-5", "drone-6"]
-		}
-	    ]
-	  },
-	  "request": {
-	    "user": {
-		"id": "officer-1",
-		"role": "officer"
-	    }
-	  }
-	}`
-	//return map[string]interface{}{
-	//	"battlefield": map[string]interface{}{
-
-	//	},
-	//}
-	//	return map[string]interface{}{
-	//		"access_control": map[string]interface{}{
-	//			"users": map[string]interface{}{
-	//				"test1": map[string]interface{}{
-	//					"acl": []string{"/hello/world"},
-	//				},
-	//				"test2": map[string]interface{}{
-	//					"acl": []string{},
-	//				},
-	//			},
-	//		},
-	//		"jwt": map[string]interface{}{
-	//			"aud": claims.ID,
-	//		},
-	//		"uri": uri,
-	//	}
+func (s *Server) getRole(user string) (string, error) {
+	_, ok := s.Users.Officers[user]
+	if ok {
+		return "officer", nil
+	}
+	_, ok = s.Users.Pilots[user]
+	if ok {
+		return "pilot", nil
+	}
+	_, ok = s.Users.Drones[user]
+	if ok {
+		return "drone", nil
+	}
+	return "", fmt.Errorf("unknown role for user %s", user)
 }
 
-func (s *Server) authorized(ctx context.Context) (string, []string, error) {
-	jwtStr := ctx.Value("jwt").(string)
-	uri := ctx.Value("uri").(string)
+func (s *Server) populateAuthzData(ctx context.Context, authzDecision *AuthorizationDecision) interface{} {
+	log.Printf("Authorizing: %s accessing %s\n", authzDecision.user, authzDecision.uri)
+	var officers []string
+	for k, _ := range s.Users.Officers {
+		officers = append(officers, k)
+	}
+	var pilots []map[string]interface{}
+	for i, _ := range s.Pilots {
+		drones := []string{}
+		for _, drone := range s.Pilots[i].Drones {
+			drones = append(drones, drone.Id)
+		}
+		pilots = append(pilots, map[string]interface{}{"id": s.Pilots[i].Id, "drones": drones})
+	}
+	return map[string]interface{}{
+		"battlefield": map[string]interface{}{
+			"officers": officers,
+			"pilots":   pilots,
+		},
+		"request": map[string]interface{}{
+			"user": map[string]string{
+				"id":   authzDecision.user,
+				"role": authzDecision.role,
+			},
+		},
+	}
+}
 
+func (s *Server) authorized(ctx context.Context) (*AuthorizationDecision, error) {
+	authzDecision := AuthorizationDecision{}
+	authzDecision.allowed = false
+	jwtStr := ctx.Value("jwt").(string)
 	if jwtStr == "" {
 		log.Fatal("JWT received nil or emtpy from context")
 	}
-	if uri == "" {
+
+	authzDecision.uri = ctx.Value("uri").(string)
+	if authzDecision.uri == "" {
 		log.Fatal("URI received nil or emtpy from context")
 	}
 
@@ -269,39 +270,41 @@ func (s *Server) authorized(ctx context.Context) (string, []string, error) {
 		return []byte(SecretKey), nil
 	})
 	if err != nil {
-		return "", []string{}, err
+		log.Print(err)
+		return nil, err
 	}
 	if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
-		userid := claims.ID
-		data := s.populateAuthzData(ctx, uri, claims)
-
+		authzDecision.user = claims.ID
+		if authzDecision.role, err = s.getRole(claims.ID); err != nil {
+			return nil, err
+		}
+		data := s.populateAuthzData(ctx, &authzDecision)
+		// TODO: Use environment variable instead of hardcoded relative path.
 		query, err := rego.New(
 			rego.Query("data.battlefield.authz"),
-			// TODO: Use environment variable instead.
 			rego.Load([]string{"./pkg/api/auth/access_policy.rego"}, nil),
 		).PrepareForEval(ctx)
 
 		if err != nil {
-			return userid, []string{}, err
+			log.Printf("Error parsing authorization policy: %s\n", err.Error())
+			return nil, err
 		}
 
 		results, err := query.Eval(ctx, rego.EvalInput(data))
 		if err != nil {
-			return userid, []string{}, err
+			log.Printf("Error evaluating policy query: %s\n", err.Error())
+			return nil, err
 		}
-		if len(results) > 0 && len(results[0].Expressions) > 0 {
-			authz, ok := results[0].Expressions[0].Value.(map[string]interface{})
-			allowed := authz["allow"].(bool)
-			if ok && allowed {
-				log.Println("Authorized")
-				return userid, authz["drones"].([]string), nil
-			} else if !ok && allowed {
-				log.Printf("Not Ok, but allowed")
-			} else if ok && !allowed {
-				log.Printf("Not allowed")
-			}
+		authz := results[0].Expressions[0].Value.(map[string]interface{})
+
+		log.Println(authz)
+
+		authzDecision.allowed = authz["allow"].(bool)
+		drones := authz["drones"].(map[string]interface{})
+		log.Println(drones)
+		for k, _ := range drones {
+			authzDecision.drones = append(authzDecision.drones, k)
 		}
-		return userid, []string{}, nil
 	}
-	return "", []string{}, nil
+	return &authzDecision, nil
 }
