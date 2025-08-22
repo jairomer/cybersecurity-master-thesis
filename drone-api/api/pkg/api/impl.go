@@ -303,7 +303,7 @@ func (s *Server) authorized(ctx context.Context) (*AuthorizationDecision, error)
 		// TODO: Use environment variable instead of hardcoded relative path.
 		query, err := rego.New(
 			rego.Query("data.battlefield.authz"),
-			rego.Load([]string{"./pkg/api/auth/access_policy.rego"}, nil),
+			rego.Load([]string{"./access_policy.rego"}, nil),
 		).PrepareForEval(ctx)
 
 		if err != nil {
