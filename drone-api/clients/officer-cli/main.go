@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 const (
 	mtls_certificate = "todo"
 	droneapi         = "http://localhost:8000"
+	//droneapi = "https://192.168.59.103:443"
 )
 
 func addJwtHeader(token string) client.RequestEditorFn {
@@ -23,9 +25,14 @@ func addJwtHeader(token string) client.RequestEditorFn {
 }
 
 func main() {
-	hc := http.Client{}
 	// TODO: Add  mtls certificate
 	authToken := ""
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	hc := http.Client{
+		Transport: tr,
+	}
 	user := client.LoginJSONRequestBody{
 		User:     "officer-1",
 		Password: "changeme",

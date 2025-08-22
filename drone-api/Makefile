@@ -17,3 +17,7 @@ build:
 	cd clients && cd pilot-cli && go mod tidy && go build . 
 	cd clients && cd officer-cli && go mod tidy && go build . 
 	cd clients && cd attacker-cli && go mod tidy && go build . 
+
+minikube:
+	cd api && go mod tidy && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build . 
+	cd api && minikube image build . -t drone-api
