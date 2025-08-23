@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-ingress 
+  labels:
+    istio-injection: enabled
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: tls-gateway
+  namespace: istio-ingress
+spec:
+  gatewayClassName: istio
+  listeners:
+  - name: https
+    hostname: "drone.api.com"
+    port: 8443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: drone-api-credential
+    allowedRoutes:
+      namespaces:
+        from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: drone-api
+  namespace: default
+spec:
+  parentRefs:
+  - name: tls-gateway
+    namespace: istio-ingress
+  hostnames: ["drone.api.com"]
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /login
+    - path:
+        type: PathPrefix
+        value: /battlefield
+    - path:
+        type: PathPrefix
+        value: /battlefield/drone
+    - path:
+        type: PathPrefix
+        value: /battlefield/provision 
+    backendRefs:
+    - name: drone-api 
+      namespace: default
+      port: 8000

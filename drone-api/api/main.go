@@ -41,7 +41,7 @@ func main() {
 		// Middlewares
 		[]api.StrictMiddlewareFunc{},
 	))
-	if err := e.Start("127.0.0.1:8000"); err != nil {
+	if err := e.Start("0.0.0.0:8000"); err != nil {
 		log.Fatal(err)
 	}
 }

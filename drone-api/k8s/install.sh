@@ -1,16 +1,29 @@
 #!/bin/sh
 
-# We will install a custom ingress gateway
-istioctl install --set profile=minimal
+set -e 
+#minikube start --driver=virtualbox
+#
+## We will install a custom ingress gateway
+#istioctl install --set profile=minimal
 
-# We will use the new Kubernetes Gateway API 
-#kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null || 
-kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml"
+# We will use the new Kubernetes Gateway API
+#kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null ||
+kubectl apply -f  "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml"
 
 # Enable istio-injection on default namespace
 kubectl label namespace default istio-injection=enabled --overwrite
 
-# Apply manifests for istio ingress gateway.
-kubectl apply -f istio-ingress.yaml 
+cd .. && make minikube && cd k8s
 
-minikube tunnel
+# Install application
+kubectl apply -f drone-api.yaml
+
+# Apply manifests for istio ingress controller
+# kubectl apply -f istio-ingress.yaml
+
+# Install kubernetes gateay and HTTProute
+kubectl apply -f istio-gw.yaml
+
+#cd certs && bash ./create_secret.sh && cd ..
+
+# minikube tunnel

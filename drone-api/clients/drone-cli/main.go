@@ -13,8 +13,16 @@ import (
 
 const (
 	mtls_certificate = "todo"
-	droneapi         = "http://localhost:8000"
+	droneapi         = "http://10.100.242.82"
+	host             = "drone-api.com"
 )
+
+func addHostHeader(host string) client.RequestEditorFn {
+	return func(ctx context.Context, req *http.Request) error {
+		req.Host = host
+		return nil
+	}
+}
 
 func addJwtHeader(token string) client.RequestEditorFn {
 	return func(ctx context.Context, req *http.Request) error {
@@ -74,7 +82,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		resp, err := c.Login(context.TODO(), user)
+		resp, err := c.Login(context.TODO(), user, addHostHeader(host))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -100,6 +108,7 @@ func main() {
 			resp, err := c.GetBattlefieldData(
 				context.TODO(),
 				addJwtHeader(authToken),
+				addHostHeader(host),
 			)
 			if err != nil {
 				log.Println(err)
@@ -129,7 +138,9 @@ func main() {
 					context.TODO(),
 					droneState.Id,
 					droneState.Location,
-					addJwtHeader(authToken))
+					addJwtHeader(authToken),
+					addHostHeader(host),
+				)
 			}
 
 			time.Sleep(2 * time.Second)

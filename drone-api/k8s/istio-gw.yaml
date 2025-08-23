@@ -1,50 +1,44 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: drone-api-ingress 
+  labels:
+    istio-injection: enabled
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: tls-gateway
-  namespace: istio-ingress
+  name: gateway
+  namespace: drone-api-ingress
 spec:
   gatewayClassName: istio
   listeners:
-  - name: https
+  - name: default
     hostname: "drone-api.com"
-    port: 443
-    protocol: HTTPS
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - name: drone-api-credential
+    port: 80
+    protocol: HTTP
     allowedRoutes:
       namespaces:
-        from: Selector
-        selector:
-          matchLabels:
-            kubernetes.io/metadata.name: default
+        from: All
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: drone-api
+  namespace: default
 spec:
   parentRefs:
-  - name: tls-gateway
-    namespace: istio-ingress
+  - name: gateway
+    namespace: drone-api-ingress
   hostnames: ["drone-api.com"]
   rules:
   - matches:
     - path:
-        type: PathPrefix
+        type: Exact
         value: /login
     - path:
         type: PathPrefix
         value: /battlefield
-    - path:
-        type: PathPrefix
-        value: /battlefield/drone/*
-    - path:
-        type: PathPrefix
-        value: /battlefield/provision 
     backendRefs:
     - name: drone-api 
-      namespace: default
       port: 8000
