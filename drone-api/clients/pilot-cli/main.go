@@ -44,16 +44,13 @@ func moveDroneToTarget(dd *client.DroneData) {
 func main() {
 	fmt.Println("pilot-cli")
 
-	pilotId := "pilot-1"
-	pilotState := client.PilotProvisioning{
-		Id:     pilotId,
-		Drones: []client.DroneData{},
-	}
 
 	caPath := flag.String("ca", "certs/ca.crt", "Path to CA certificate")
 	certPath := flag.String("clientcert", "certs/cert.crt", "Path to client certificate")
 	keyPath := flag.String("clientkey", "certs/cert.key", "Path to client key")
 	apihost := flag.String("apihost", "10.101.92.59", "IP for drone API gateway")
+	pilotid := flag.String("pilotid", "pilot-1", "Provisioned id for the pilot")
+	password := flag.String("password", "test12!", "Provisioned password for the pilot")
 	flag.Parse()
 
 	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
@@ -69,6 +66,11 @@ func main() {
 	caCertPool := x509.NewCertPool()
 	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
 		log.Fatal("Failed to append CA cert")
+	}
+	
+	pilotState := client.PilotProvisioning{
+		Id:     *pilotid,
+		Drones: []client.DroneData{},
 	}
 
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
@@ -96,8 +98,8 @@ func main() {
 	}
 
 	user := client.LoginJSONRequestBody{
-		User:     pilotId,
-		Password: "test12!",
+		User:     *pilotid,
+		Password: *password,
 	}
 
 	authToken := ""

@@ -4,4 +4,6 @@
 	-ca ../../k8s/certs/gen/ca/ca.crt \
 	-clientcert ../../k8s/certs/gen/drone-cert/cli.drone.api.crt \
 	-clientkey ../../k8s/certs/gen/drone-cert/cli.drone.api.key \
-	-apihost 10.100.11.31
+	-apihost 10.100.11.31 \
+	-droneid "drone-1" \
+	-password "test12!"

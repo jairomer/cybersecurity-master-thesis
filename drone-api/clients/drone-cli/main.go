@@ -66,7 +66,7 @@ func main() {
 	certPath := flag.String("clientcert", "certs/cert.crt", "Path to client certificate")
 	keyPath := flag.String("clientkey", "certs/cert.key", "Path to client key")
 	apihost := flag.String("apihost", "10.101.92.59", "IP for drone API gateway")
-	droneid := flag.String("droneid", "drone-ABC", "Provisioned id for the drone")
+	droneid := flag.String("droneid", "drone-1", "Provisioned id for the drone")
 	password := flag.String("password", "test12!", "Provisioned password for the drone")
 	flag.Parse()
 
