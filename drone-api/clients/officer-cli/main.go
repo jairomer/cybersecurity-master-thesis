@@ -39,7 +39,17 @@ func main() {
 	certPath := flag.String("clientcert", "certs/cert.crt", "Path to client certificate")
 	keyPath := flag.String("clientkey", "certs/cert.key", "Path to client key")
 	apihost := flag.String("apihost", "10.101.92.59", "IP for drone API gateway")
+	officerid := flag.String("officerid", "officer-ABC", "Provisioned id for the officer")
+	password := flag.String("password", "changeme", "Provisioned password for the officer")
 	flag.Parse()
+
+	if officerid == nil {
+		log.Fatal("Missing pilotid")
+	}
+
+	if password == nil {
+		log.Fatal("Missing drone password")
+	}
 
 	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
 	if err != nil {
@@ -81,8 +91,8 @@ func main() {
 		Transport: tr,
 	}
 	user := client.LoginJSONRequestBody{
-		User:     "officer-1",
-		Password: "changeme",
+		User:     *officerid,
+		Password: *password,
 	}
 
 	log.Println("officer-cli")
@@ -115,6 +125,7 @@ func main() {
 			log.Fatal(err)
 		}
 		log.Println("Provisioning battlefield")
+		// TODO: Use a YAML file instead.
 		provisioning := client.BattlefieldProvision{
 			Credentials: []client.UserProvision{
 				client.UserProvision{User: "officer-1", Password: "test12!", Role: client.Officer},

@@ -66,7 +66,17 @@ func main() {
 	certPath := flag.String("clientcert", "certs/cert.crt", "Path to client certificate")
 	keyPath := flag.String("clientkey", "certs/cert.key", "Path to client key")
 	apihost := flag.String("apihost", "10.101.92.59", "IP for drone API gateway")
+	droneid := flag.String("droneid", "drone-ABC", "Provisioned id for the drone")
+	password := flag.String("password", "test12!", "Provisioned password for the drone")
 	flag.Parse()
+
+	if droneid == nil {
+		log.Fatal("Missing droneid")
+	}
+
+	if password == nil {
+		log.Fatal("Missing drone password")
+	}
 
 	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
 	if err != nil {
@@ -82,8 +92,6 @@ func main() {
 	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
 		log.Fatal("Failed to append CA cert")
 	}
-
-	droneid := "drone-1"
 
 	fmt.Println("drone-cli")
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
@@ -109,15 +117,15 @@ func main() {
 	hc := http.Client{
 		Transport: tr,
 	}
-	// TODO: Add  mtls certificate
 	authToken := ""
+
 	user := client.LoginJSONRequestBody{
-		User:     droneid,
-		Password: "test12!",
+		User:     *droneid,
+		Password: *password,
 	}
 
 	droneState := client.DroneData{
-		Id:       droneid,
+		Id:       *droneid,
 		Location: client.Coordinate{},
 		Target:   client.Coordinate{},
 	}

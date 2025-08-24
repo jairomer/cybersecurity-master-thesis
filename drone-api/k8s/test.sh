@@ -2,6 +2,7 @@
 #
 set -e
 #kubectl wait --for=condition=programmed gtw gateway -n drone-api-ingress
+echo "Waiting for minikube tunnel..."
 kubectl wait --for=condition=programmed gtw tls-gateway -n drone-api-ingress
 
 #export INGRESSDRONE_HOST=$(kubectl get gtw gateway -n drone-api-ingress -o jsonpath='{.status.addresses[0].value}')

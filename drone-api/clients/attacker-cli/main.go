@@ -2,31 +2,130 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"flag"
+	"log"
+	"net"
 	"net/http"
+	"os"
+	"time"
 
 	client "uc3m.es/attacker-cli/api"
 )
 
 const (
-	mtls_officer_certificate = "todo"
-	mtls_pilot_certificate   = "todo"
-	mtls_drone_certificate   = "todo"
-	droneapi                 = "http://localhost:8000"
+	droneapi = "https://api.drone.com:443"
 )
 
-func addJwtHeader(token string) client.RequestEditorFn {
+//	func addJwtHeader(token string) client.RequestEditorFn {
+//		return func(ctx context.Context, req *http.Request) error {
+//			req.Header.Add("Authorization", "Bearer "+token)
+//			return nil
+//		}
+//	}
+func addHostHeader(host string) client.RequestEditorFn {
 	return func(ctx context.Context, req *http.Request) error {
-		req.Header.Add("Authorization", "Bearer "+token)
+		req.Host = host
 		return nil
 	}
 }
 
-func officerAttackBattery() {
-	// Scenario 1: Attempt connection to officer endpoints without certificate.
-	// 	Expected: Failure to connect.
+func getClient(caPath, certPath, keyPath, apihost *string) *client.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	hc := http.Client{}
+	if caPath != nil && certPath != nil && keyPath != nil {
+		cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
+		if err != nil {
+			log.Printf("Failed to load client cert/key pair: %w", err)
+		}
 
+		caCert, err := os.ReadFile(*caPath)
+		if err != nil {
+			log.Printf("Failed to load CA file: %w", err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+			log.Printf("Failed to append CA cert")
+		}
+		hc.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				ServerName:   "api.drone.com",
+				Certificates: []tls.Certificate{cert},
+				RootCAs:      caCertPool,
+				MinVersion:   tls.VersionTLS12,
+			},
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				// This is for resolving the TLS CN to a particular IP.
+				if apihost != nil {
+					hst := *apihost
+					if addr == "api.drone.com:443" {
+						// log.Printf("Dialling address: %s\n", addr)
+						return dialer.DialContext(ctx, network, net.JoinHostPort(hst, "443"))
+					}
+				}
+				return dialer.DialContext(ctx, network, addr)
+			},
+		}
+	} else {
+		hc.Transport = &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				// This is for resolving the TLS CN to a particular IP.
+				if apihost != nil {
+					hst := *apihost
+					if addr == "api.drone.com:443" {
+						// log.Printf("Dialling address: %s\n", addr)
+						return dialer.DialContext(ctx, network, net.JoinHostPort(hst, "443"))
+					}
+				}
+				return dialer.DialContext(ctx, network, addr)
+			},
+		}
+	}
+	c, err := client.NewClient(droneapi, client.WithHTTPClient(&hc))
+	if err != nil {
+		log.Fatal(err)
+	}
+	return c
+}
+
+func officerAttackBattery(caPath, certPath, keyPath, apihost *string) {
+	host := "officer.drone.com"
+	{
+		// Scenario 1: Attempt connection to officer endpoints without certificate.
+		// 	Expected: Failure to connect.
+		c := getClient(nil, nil, nil, apihost)
+		log.Println("Attept to provision battlefield without certificate nor authentication...")
+		provisioning := client.BattlefieldProvision{
+			Credentials: []client.UserProvision{},
+		}
+		if _, err := c.BattlefieldProvision(context.TODO(), provisioning, addHostHeader(host)); err == nil {
+			log.Printf("Attacker was able to access battlefield provision endpoint without credentials nor certificate.")
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
 	// Scenario 2: Officer certificate has been disclosed.
 	// 	Expected: mTLS successful, receive 401 to officer endpoints.
+	{
+		// Scenario 2: Officer certificate has been disclosed.
+		// 	Expected: mTLS successful, receive 401 to officer endpoints.
+		c := getClient(caPath, certPath, keyPath, apihost)
+		log.Println("Attept to provision battlefield without authentication...")
+		provisioning := client.BattlefieldProvision{
+			Credentials: []client.UserProvision{},
+		}
+		if resp, err := c.BattlefieldProvision(context.TODO(), provisioning, addHostHeader(host)); err == nil {
+			if resp.StatusCode == 200 {
+				log.Printf("Attacker was able to access battlefield provision endpoint without credentials.")
+			} else {
+				log.Printf("Attacker blocked: %s", resp.Status)
+			}
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
 
 	// Scenario 2A: Attempt to access drone endpoints with officer certificate.
 	//	Expected: mTLS failure
@@ -35,12 +134,46 @@ func officerAttackBattery() {
 	//	Expected: mTLS failure
 }
 
-func pilotAttackBattery() {
-	// Scenario 1: Attempt connection to pilot endpoints without  certificate.
-	// 	Expected: Failure to connect.
-
-	// Scenario 2: Pilot certificate has been disclosed.
-	// 	Expected: mTLS successful, receive 401 to pilot endpoints.
+func pilotAttackBattery(caPath, certPath, keyPath, apihost *string) {
+	host := "pilot.drone.com"
+	{
+		// Scenario 1: Attempt connection to pilot endpoints without  certificate.
+		// 	Expected: Failure to connect.
+		c := getClient(nil, nil, nil, apihost)
+		log.Println("Attacker takeover of a drone without certificate nor authentication...")
+		_, err := c.SetTargetLocation(
+			context.TODO(),
+			"drone-1",
+			client.Coordinate{Altitude: 0, Longitude: 0, Latitude: 0},
+			addHostHeader(host),
+		)
+		if err == nil {
+			log.Printf("Attacker was able to access pilot endpoint without credentials nor certificate.")
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
+	{
+		// Scenario 2: Pilot certificate has been disclosed.
+		// 	Expected: mTLS successful, receive 401 to pilot endpoints.
+		c := getClient(caPath, certPath, keyPath, apihost)
+		log.Println("Attacker takeover of a drone without authentication...")
+		resp, err := c.SetTargetLocation(
+			context.TODO(),
+			"drone-1",
+			client.Coordinate{Altitude: 0, Longitude: 0, Latitude: 0},
+			addHostHeader(host),
+		)
+		if err == nil {
+			if resp.StatusCode == 200 {
+				log.Printf("Attacker was able to execute drone takeover without credentials.")
+			} else {
+				log.Printf("Attacker blocked: %s", resp.Status)
+			}
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
 
 	// Scenario 2A: Attempt to access drone endpoints with pilot certificate.
 	// 	Expected: mTLS fails
@@ -54,217 +187,177 @@ func pilotAttackBattery() {
 	// 		- Data integrity and confidentiality for other pilots and drones of other pilots is secured.
 }
 
-func droneAttackBattery() {
+func droneAttackBattery(caPath, certPath, keyPath, apihost *string) {
 	// Scenario 1: Attempt connection to Drone endpoints without  certificate.
+	host := "cli.drone.com"
+	{
+		// Scenario 1: Attempt connection to pilot endpoints without  certificate.
+		// 	Expected: Failure to connect.
+		c := getClient(nil, nil, nil, apihost)
+		log.Println("Attacker attempt to spoof a drone location without certificate nor authentication...")
+		_, err := c.SetCurrentLocation(
+			context.TODO(),
+			"drone-1",
+			client.Coordinate{Altitude: 0, Longitude: 0, Latitude: 0},
+			addHostHeader(host),
+		)
+		if err == nil {
+			log.Println("Attacker was able to access drone endpoint without credentials nor certificate.")
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
+	{
+		{
+			// Scenario 2: Drone certificate has been disclosed.
+			// 	Expected: mTLS successful, receive 401 to pilot endpoints.
+			c := getClient(caPath, certPath, keyPath, apihost)
+			log.Println("Attacker attempt to spoof a drone location without authentication...")
+			resp, err := c.SetCurrentLocation(
+				context.TODO(),
+				"drone-1",
+				client.Coordinate{Altitude: 0, Longitude: 0, Latitude: 0},
+				addHostHeader(host),
+			)
+			if err == nil {
+				if resp.StatusCode == 200 {
+					log.Println("Attacker was able to execute drone takeover without credentials.")
+				} else {
+					log.Printf("Attacker blocked: %s\n", resp.Status)
+				}
+			} else {
+				log.Printf("Attacker blocked: %s\n", err.Error())
+			}
+		}
+		{
+			// Scenario 2A: Attempt to access officer endpoints with drone certificate.
+			// 	Expected: mTLS fails.
+			c := getClient(caPath, certPath, keyPath, apihost)
+			log.Println("Attept to provision battlefield with a drone certificate without authentication...")
+			provisioning := client.BattlefieldProvision{
+				Credentials: []client.UserProvision{},
+			}
+			if _, err := c.BattlefieldProvision(context.TODO(), provisioning, addHostHeader(host)); err == nil {
+				log.Printf("Attacker was able to access battlefield provision endpoint without officer certificate using a drone certificate.")
+			} else {
+				log.Printf("Attacker blocked: %s", err.Error())
+			}
+		}
+		{
+			// Scenario 2B: Attempt to access pilot endpoints with a drone certificate.
+			// 	Expected: mTLS fails.
+			c := getClient(caPath, certPath, keyPath, apihost)
+			log.Println("Attacker takeover of a drone with a drone certificate without authentication...")
+			_, err := c.SetTargetLocation(
+				context.TODO(),
+				"drone-1",
+				client.Coordinate{Altitude: 0, Longitude: 0, Latitude: 0},
+				addHostHeader(host),
+			)
+			if err == nil {
+				log.Println("Attacker was able to access a pilot specific endpoint with a drone certificate.")
+			} else {
+				log.Printf("Attacker blocked: %s", err.Error())
+			}
+		}
+	}
+}
 
-	// Scenario 2: Drone certificate has been disclosed.
-	// 	Expected: mTLS successful, receive 401 to pilot endpoints.
+func login_cracking(caPath, certPath, keyPath, apihost *string) {
+	host := "cli.drone.com"
+	{
+		// Scenario 1: Attempt connection to pilot endpoints without certificate.
+		// 	Expected: Failure to connect.
+		c := getClient(nil, nil, nil, apihost)
+		log.Println("Attacker attempt to login as a drone location without certificate nor authentication...")
+		_, err := c.Login(context.TODO(), client.UserLogin{User: "test", Password: "test"}, addHostHeader(host))
+		if err == nil {
+			log.Println("Attacker was able to access drone endpoint without credentials nor certificate.")
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
+	{
+		// Scenario 2: After successfully disclosing a drone certificate, a brute force attack is attempted.
+		// 	Expected: 401.
+		c := getClient(caPath, certPath, keyPath, apihost)
+		log.Println("Attacker attempt to login as a drone location without certificate nor authentication...")
 
-	// Scenario 2A: Attempt to access officer endpoints with drone certificate.
-	// 	Expected: mTLS fails.
-
-	// Scenario 2B: Attempt to access pilot endpoints with drone certificates.
-	// 	Expected: mTLS fails.
-
-	// Scenario 3: Drone credentials have been disclosed.
-	// 	Expected:
-	// 		- Drone data integrity and confidentiality has been compromissed
-	//		- Data integrity and confidentiality for other drones, pilots or officers is maintained.
+		for {
+			// This is just for traffic generation.
+			// At this point, a successful attack will most likely be possible if the attacker creates a good Dictionary
+			// of if the defender uses weak and predictable passwords and users.
+			resp, err := c.Login(context.TODO(), client.UserLogin{User: "test", Password: "test"}, addHostHeader(host))
+			if err == nil {
+				if resp.StatusCode == 200 {
+					log.Printf("Attacker was able to Login.")
+				} else {
+					log.Printf(".")
+					//log.Printf("Attacker blocked: %s", resp.Status)
+				}
+			} else {
+				//log.Printf("Attacker blocked: %s", err.Error())
+			}
+		}
+	}
 }
 
 func main() {
-	/*
-		   log.Println("attacker-cli")
+	caPath := flag.String("ca", "certs/ca.crt", "Path to CA certificate")
 
-		hc := http.Client{}
-		// TODO: Add  mtls certificate
-		authToken := ""
-		user := client.LoginJSONRequestBody{
-			User:     "officer-1",
-			Password: "changeme",
-		}
-		   	{
-		   		log.Println("Login officer with default credentials")
-		   		// Provision battlefield.
-		   		c, err := client.NewClient(droneapi, client.WithHTTPClient(&hc))
-		   		if err != nil {
-		   			log.Fatal(err)
-		   		}
+	officerCertPath := flag.String("officercert", "certs/cert.crt", "Path to officer certificate")
+	officerKeyPath := flag.String("officerkey", "certs/cert.key", "Path to officer key")
 
-		   		resp, err := c.Login(context.TODO(), user)
-		   		if err != nil {
-		   			log.Fatal(err)
-		   		}
-		   		if resp.StatusCode == 200 {
-		   			loginRes, err := client.ParseLoginResponse(resp)
-		   			if err != nil {
-		   				log.Fatal(err)
-		   			}
-		   			authToken = loginRes.JSON200.Token
-		   		} else {
-		   			log.Fatalf("Authentication failed: %s", resp.Status)
-		   		}
-		   		log.Printf("Login with default credentials was successful.")
-		   	}
+	pilotCertPath := flag.String("pilotcert", "certs/cert.crt", "Path to pilot certificate")
+	pilotKeyPath := flag.String("pilotkey", "certs/cert.key", "Path to pilot key")
 
-		   	{
-		   		c, err := client.NewClient(droneapi, client.WithHTTPClient(&hc))
-		   		if err != nil {
-		   			log.Fatal(err)
-		   		}
-		   		log.Println("Provisioning battlefield")
-		   		provisioning := client.BattlefieldProvision{
-		   			Credentials: []client.UserProvision{
-		   				client.UserProvision{User: "officer-1", Password: "test12!", Role: client.Officer},
-		   				client.UserProvision{User: "pilot-1", Password: "test12!", Role: client.Pilot},
-		   				client.UserProvision{User: "pilot-2", Password: "test12!", Role: client.Pilot},
-		   				client.UserProvision{User: "drone-1", Password: "test12!", Role: client.Drone},
-		   				client.UserProvision{User: "drone-2", Password: "test12!", Role: client.Drone},
-		   				client.UserProvision{User: "drone-3", Password: "test12!", Role: client.Drone},
-		   				client.UserProvision{User: "drone-4", Password: "test12!", Role: client.Drone},
-		   				client.UserProvision{User: "drone-5", Password: "test12!", Role: client.Drone},
-		   				client.UserProvision{User: "drone-6", Password: "test12!", Role: client.Drone},
-		   			},
-		   			Pilots: []client.PilotProvisioning{
-		   				client.PilotProvisioning{
-		   					Id: "pilot-1",
-		   					Drones: []client.DroneData{
-		   						client.DroneData{
-		   							Id: "drone-1",
-		   							Location: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   							Target: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   						},
-		   						client.DroneData{
-		   							Id: "drone-2",
-		   							Location: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   							Target: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   						},
-		   						client.DroneData{
-		   							Id: "drone-3",
-		   							Location: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   							Target: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   						},
-		   					},
-		   				},
-		   				client.PilotProvisioning{
-		   					Id: "pilot-2",
-		   					Drones: []client.DroneData{
-		   						client.DroneData{
-		   							Id: "drone-4",
-		   							Location: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   							Target: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   						},
-		   						client.DroneData{
-		   							Id: "drone-5",
-		   							Location: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   							Target: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   						},
-		   						client.DroneData{
-		   							Id: "drone-6",
-		   							Location: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   							Target: client.Coordinate{
-		   								Altitude:  0.0,
-		   								Longitude: 0.0,
-		   								Latitude:  0.0,
-		   							},
-		   						},
-		   					},
-		   				},
-		   			},
-		   		}
+	droneCertPath := flag.String("dronecert", "certs/cert.crt", "Path to drone certificate")
+	droneKeyPath := flag.String("dronekey", "certs/cert.key", "Path to drone key")
 
-		   		resp, err := c.BattlefieldProvision(
-		   			context.TODO(),
-		   			provisioning,
-		   			addJwtHeader(authToken),
-		   		)
-		   		if err != nil {
-		   			log.Fatal(err)
-		   		}
-		   		if resp.StatusCode != http.StatusOK {
-		   			log.Fatalf("Expected HTTP 200 but received %s", resp.Status)
-		   		}
+	apihost := flag.String("apihost", "10.101.92.59", "IP for drone API gateway")
 
-		   		provResp, err := client.ParseBattlefieldProvisionResponse(resp)
-		   		if err != nil {
-		   			log.Fatal(err)
-		   		}
-		   		if provResp == nil {
-		   			log.Fatal("Empty provisioning result received.")
-		   		}
+	loginCracking := flag.String("crack", "", "Add to enable login bruteforce.")
+	flag.Parse()
 
-		   		log.Println(string(provResp.Body))
-		   	}
+	log.Println("===============================")
+	log.Println("= Attacking Officer Endpoints =")
+	log.Println("===============================")
+	officerAttackBattery(
+		caPath,
+		officerCertPath,
+		officerKeyPath,
+		apihost,
+	)
 
-		   	{
-		   		c, err := client.NewClient(droneapi, client.WithHTTPClient(&hc))
-		   		if err != nil {
-		   			log.Fatal(err)
-		   		}
+	log.Println("=============================")
+	log.Println("= Attacking Pilot Endpoints =")
+	log.Println("=============================")
+	pilotAttackBattery(
+		caPath,
+		pilotCertPath,
+		pilotKeyPath,
+		apihost,
+	)
 
-		   		for {
-		   			fmt.Print("\033[H\033[2J")
-		   			fmt.Printf("Monitoring battlefield as: %s", user.User)
-		   			resp, err := c.GetBattlefieldData(
-		   				context.TODO(),
-		   				addJwtHeader(authToken),
-		   			)
-		   			if err != nil {
-		   				log.Println(err)
-		   			} else {
-		   				bdResp, err := client.ParseGetBattlefieldDataResponse(resp)
-		   				if err != nil {
-		   					log.Println(err)
-		   				} else {
-		   					log.Println(string(bdResp.Body))
-		   				}
-		   			}
-		   			time.Sleep(2 * time.Second)
-		   		}
-		   	}
-	*/
+	log.Println("=============================")
+	log.Println("= Attacking Drone Endpoints =")
+	log.Println("=============================")
+	droneAttackBattery(
+		caPath,
+		droneCertPath,
+		droneKeyPath,
+		apihost,
+	)
+
+	if loginCracking != nil {
+		log.Println("=============================")
+		log.Println("= Attacking Login Endpoints =")
+		log.Println("=============================")
+		login_cracking(
+			caPath,
+			droneCertPath,
+			droneKeyPath,
+			apihost,
+		)
+	}
 }
