@@ -83,16 +83,34 @@ openssl x509 -req -sha256 -days 365 -CA ${CA_CRT} \
 ##########################################################################
 # Generate a OFFICER-CLI-CLIENT certificate and private key
 ##########################################################################
+#openssl req -out gen/officer-cert/officer.cli.csr -newkey rsa:2048 \
+#	-nodes -keyout gen/officer-cert/officer.cli.key \
+#	-subj "/CN=client.officer.cli/O=UC3M"
+#
+#openssl x509 -req -sha256 -days 365 -CA gen/ca/ca.crt \
+#	-CAkey gen/ca/ca.key -set_serial 1 \
+#	-in gen/officer-cert/officer.cli.csr \
+#	-out gen/officer-cert/officer.cli.crt
+
 export OFFICER_CLIENT_KEY="gen/officer-cert/officer.drone.api.key"
 export OFFICER_CLIENT_CSR="gen/officer-cert/officer.drone.api.csr"
 export OFFICER_CLIENT_CRT="gen/officer-cert/officer.drone.api.crt"
+export OFFICER_CONFIG="gen/officer-cert/openssl.cnf"
+
+# openssl req -out ${OFFICER_CLIENT_CSR} -newkey rsa:2048 -nodes \
+# 	-keyout ${OFFICER_CLIENT_KEY} -subj "/CN=officer.drone.api/O=UC3M"
+# 
+# openssl x509 -req -sha256 -days 365 -CA ${CA_CRT} \
+# 	-CAkey ${CA_KEY} -set_serial 1 -in ${OFFICER_CLIENT_CSR} \
+# 	-out ${OFFICER_CLIENT_CRT}
 
 openssl req -out ${OFFICER_CLIENT_CSR} -newkey rsa:2048 -nodes \
-	-keyout ${OFFICER_CLIENT_KEY} -subj "/CN=officer.drone.com/O=UC3M"
+	-keyout ${OFFICER_CLIENT_KEY} -subj "/CN=api.drone.com/O=UC3M"
 
-openssl x509 -req -sha256 -days 365 -CA ${CA_CRT} \
+openssl req -sha256 -days 365 -CA ${CA_CRT} \
 	-CAkey ${CA_KEY} -set_serial 1 -in ${OFFICER_CLIENT_CSR} \
-	-out ${OFFICER_CLIENT_CRT}
+	-out ${OFFICER_CLIENT_CRT} -config ${OFFICER_CONFIG} \
+	-copy_extensions=copy
 
 ##########################################################################
 # Generate a ATTACKER-CLI-CLIENT certificate and private key

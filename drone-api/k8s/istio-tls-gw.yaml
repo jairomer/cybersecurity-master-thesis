@@ -20,8 +20,9 @@ spec:
     tls:
       mode: Terminate
       certificateRefs:
-      - name: drone-api-credential
-        kind: Secret
+      - name: mtls-drone-api-credential
+      options:
+        gateway.istio.io/tls-terminate-mode: MUTUAL
     allowedRoutes:
       namespaces:
         from: All
