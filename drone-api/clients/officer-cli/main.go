@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -14,8 +15,9 @@ import (
 const (
 	mtls_certificate = "todo"
 	//droneapi         = "http://localhost:8000"
-	droneapi = "http://10.100.242.82"
-	host     = "drone-api.com"
+	apihost  = "10.101.92.59"
+	host     = "officer.drone.com"
+	droneapi = "https://api.drone.com:443"
 )
 
 func addHostHeader(host string) client.RequestEditorFn {
@@ -36,10 +38,19 @@ func addJwtHeader(token string) client.RequestEditorFn {
 func main() {
 	// TODO: Add  mtls certificate
 	authToken := ""
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: true, // TODO: Remove this
 			ServerName:         host,
+		},
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// This is for resolving the TLS CN to a particular IP.
+			if addr == "api.drone.com:443" {
+				//log.Printf("Dialling address: %s\n", addr)
+				return dialer.DialContext(ctx, network, net.JoinHostPort(apihost, "443"))
+			}
+			return dialer.DialContext(ctx, network, addr)
 		},
 	}
 	hc := http.Client{
