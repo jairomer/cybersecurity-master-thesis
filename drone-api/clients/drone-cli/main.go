@@ -3,26 +3,27 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	client "uc3m.es/drone-cli/api"
 )
 
 const (
-	mtls_certificate = "todo"
-	apihost          = "10.101.92.59"
-	host             = "cli.drone.com"
-	droneapi         = "https://api.drone.com:443"
+	host     = "api.drone.com"
+	droneapi = "https://api.drone.com:443"
 )
 
-func addHostHeader(host string) client.RequestEditorFn {
+func addHostHeader() client.RequestEditorFn {
 	return func(ctx context.Context, req *http.Request) error {
-		req.Host = host
+		req.Host = "cli.drone.com"
 		return nil
 	}
 }
@@ -61,20 +62,46 @@ func inTargetLocation(dd *client.DroneData) bool {
 }
 
 func main() {
+	caPath := flag.String("ca", "certs/ca.crt", "Path to CA certificate")
+	certPath := flag.String("clientcert", "certs/cert.crt", "Path to client certificate")
+	keyPath := flag.String("clientkey", "certs/cert.key", "Path to client key")
+	apihost := flag.String("apihost", "10.101.92.59", "IP for drone API gateway")
+	flag.Parse()
+
+	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
+	if err != nil {
+		log.Fatal("Failed to load client cert/key pair: %w", err)
+	}
+
+	caCert, err := os.ReadFile(*caPath)
+	if err != nil {
+		log.Fatal("Failed to load CA file: %w", err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+		log.Fatal("Failed to append CA cert")
+	}
+
 	droneid := "drone-1"
 
 	fmt.Println("drone-cli")
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, // TODO: Remove this
-			ServerName:         host,
+			ServerName:   "api.drone.com",
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      caCertPool,
+			MinVersion:   tls.VersionTLS12,
 		},
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			// This is for resolving the TLS CN to a particular IP.
-			if addr == "api.drone.com:443" {
-				//log.Printf("Dialling address: %s\n", addr)
-				return dialer.DialContext(ctx, network, net.JoinHostPort(apihost, "443"))
+			if apihost != nil {
+				hst := *apihost
+				if addr == "api.drone.com:443" {
+					// log.Printf("Dialling address: %s\n", addr)
+					return dialer.DialContext(ctx, network, net.JoinHostPort(hst, "443"))
+				}
 			}
 			return dialer.DialContext(ctx, network, addr)
 		},
@@ -101,7 +128,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		resp, err := c.Login(context.TODO(), user, addHostHeader(host))
+		resp, err := c.Login(context.TODO(), user, addHostHeader())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -127,7 +154,7 @@ func main() {
 			resp, err := c.GetBattlefieldData(
 				context.TODO(),
 				addJwtHeader(authToken),
-				addHostHeader(host),
+				addHostHeader(),
 			)
 			if err != nil {
 				log.Println(err)
@@ -158,7 +185,7 @@ func main() {
 					droneState.Id,
 					droneState.Location,
 					addJwtHeader(authToken),
-					addHostHeader(host),
+					addHostHeader(),
 				)
 			}
 
