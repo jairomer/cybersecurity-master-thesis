@@ -21,3 +21,10 @@ build:
 minikube:
 	cd api && go mod tidy && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build . 
 	cd api && minikube image build . -t drone-api
+
+clean:
+	cd api && go clean
+	cd clients && cd drone-cli && go clean
+	cd clients && cd pilot-cli && go clean
+	cd clients && cd officer-cli && go clean
+	cd clients && cd attacker-cli && go clean
