@@ -11,6 +11,30 @@ metadata:
   name: drone-api
   namespace: default
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: rest-api-role
+rules:
+- apiGroups: [""]
+  resources: [""]
+  verbs: [""]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rest-api-rb
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: drone-api
+  namespace: default
+roleRef:
+  kind: Role
+  name: rest-api-role
+  apiGroup: rbac.authorization.k8s.io
+--- 
 apiVersion: v1
 kind: Service
 metadata:
@@ -51,3 +75,31 @@ spec:
         name: drone-api
         ports:
         - containerPort: 8000
+        resources:
+          requests:
+            cpu: "250m"      # Requests 0.25 vCPU
+            memory: "256Mi"  # Requests 256 MB RAM
+          limits:
+            cpu: "1000m"      # Hard cap at 0.5 vCPU
+            memory: "512Mi"  # Hard cap at 512 MB RAM
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: drone-api-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: drone-api
+  minReplicas: 1
+  maxReplicas: 1
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+
