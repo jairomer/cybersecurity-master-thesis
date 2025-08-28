@@ -100,14 +100,14 @@ func officerAttackBattery(caPath, certPath, keyPath, apihost *string) {
 		provisioning := client.BattlefieldProvision{
 			Credentials: []client.UserProvision{},
 		}
-		if _, err := c.BattlefieldProvision(context.TODO(), provisioning, addHostHeader(host)); err == nil {
-			log.Printf("Attacker was able to access battlefield provision endpoint without credentials nor certificate.")
+		if resp, err := c.BattlefieldProvision(context.TODO(), provisioning, addHostHeader(host)); err == nil {
+			if resp.StatusCode == 200 {
+				log.Printf("Attacker was able to access battlefield provision endpoint without credentials nor certificate.")
+			}
 		} else {
 			log.Printf("Attacker blocked: %s", err.Error())
 		}
 	}
-	// Scenario 2: Officer certificate has been disclosed.
-	// 	Expected: mTLS successful, receive 401 to officer endpoints.
 	{
 		// Scenario 2: Officer certificate has been disclosed.
 		// 	Expected: mTLS successful, receive 401 to officer endpoints.
@@ -127,11 +127,38 @@ func officerAttackBattery(caPath, certPath, keyPath, apihost *string) {
 		}
 	}
 
-	// Scenario 2A: Attempt to access drone endpoints with officer certificate.
-	//	Expected: mTLS failure
-
-	// Scenario 2B: Attempt to access pilot endpoints with officer certificate.
-	//	Expected: mTLS failure
+	{
+		// Scenario 2A: Attempt to access drone endpoints with officer certificate.
+		//	Expected: mTLS failure
+		c := getClient(caPath, certPath, keyPath, apihost)
+		log.Println("Attept to access drone endpoint with officer certificate...")
+		body := client.Coordinate{}
+		if resp, err := c.SetCurrentLocation(context.TODO(), "drone-1", body, addHostHeader(host)); err == nil {
+			if resp.StatusCode == 200 {
+				log.Printf("Attacker was able to access drone endpoint without drone credentials.")
+			} else {
+				log.Printf("Attacker blocked: %s", resp.Status)
+			}
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
+	{
+		// Scenario 2B: Attempt to access pilot endpoints with officer certificate.
+		//	Expected: mTLS failure
+		c := getClient(caPath, certPath, keyPath, apihost)
+		log.Println("Attept to access pilot endpoint with officer certificate...")
+		body := client.Coordinate{}
+		if resp, err := c.SetTargetLocation(context.TODO(), "drone-1", body, addHostHeader(host)); err == nil {
+			if resp.StatusCode == 200 {
+				log.Printf("Attacker was able to access a pilot endpoint without credentials pilot.")
+			} else {
+				log.Printf("Attacker blocked: %s", resp.Status)
+			}
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
 }
 
 func pilotAttackBattery(caPath, certPath, keyPath, apihost *string) {
@@ -175,16 +202,60 @@ func pilotAttackBattery(caPath, certPath, keyPath, apihost *string) {
 		}
 	}
 
-	// Scenario 2A: Attempt to access drone endpoints with pilot certificate.
-	// 	Expected: mTLS fails
+	{
+		// Scenario 2A: Attempt to access drone endpoints with pilot certificate.
+		// 	Expected: mTLS fails
+		c := getClient(caPath, certPath, keyPath, apihost)
+		log.Println("Attept to access drone endpoint with pilot certificate...")
+		body := client.Coordinate{}
+		if resp, err := c.SetCurrentLocation(context.TODO(), "drone-1", body, addHostHeader(host)); err == nil {
+			if resp.StatusCode == 200 {
+				log.Printf("Attacker was able to access drone endpoint without drone credentials.")
+			} else {
+				log.Printf("Attacker blocked: %s", resp.Status)
+			}
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
 
 	// Scenario 2B: Attempt to access officer endpoints with pilot certificate.
 	// 	Expected: mTLS fails
+	{
+		c := getClient(caPath, certPath, keyPath, apihost)
+		log.Println("Attept to provision battlefield without Officer credentials...")
+		provisioning := client.BattlefieldProvision{
+			Credentials: []client.UserProvision{},
+		}
+		if resp, err := c.BattlefieldProvision(context.TODO(), provisioning, addHostHeader(host)); err == nil {
+			if resp.StatusCode == 200 {
+				log.Printf("Attacker was able to access battlefield provision endpoint with Pilot credentials.")
+			} else {
+				log.Printf("Attacker blocked: %s", resp.Status)
+			}
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
 
-	// Scenario 3: Pilot credentials have been disclosed.
-	// 	Expected:
-	// 		- Pilot data integrity and confidentiality has been compromissed!
-	// 		- Data integrity and confidentiality for other pilots and drones of other pilots is secured.
+	{
+		// Scenario 3: Pilot credentials have been disclosed.
+		// 	Expected:
+		// 		- Pilot data integrity and confidentiality has been compromissed!
+		// 		- Data integrity and confidentiality for other pilots and drones of other pilots is secured.
+		c := getClient(caPath, certPath, keyPath, apihost)
+		log.Println("Attept to access another's pilot drone endpoint with pilot certificate...")
+		body := client.Coordinate{}
+		if resp, err := c.SetCurrentLocation(context.TODO(), "drone-4", body, addHostHeader(host)); err == nil {
+			if resp.StatusCode == 200 {
+				log.Printf("Attacker was able to access drone information from another pilot!")
+			} else {
+				log.Printf("Attacker blocked: %s", resp.Status)
+			}
+		} else {
+			log.Printf("Attacker blocked: %s", err.Error())
+		}
+	}
 }
 
 func droneAttackBattery(caPath, certPath, keyPath, apihost *string) {
@@ -233,12 +304,16 @@ func droneAttackBattery(caPath, certPath, keyPath, apihost *string) {
 			// Scenario 2A: Attempt to access officer endpoints with drone certificate.
 			// 	Expected: mTLS fails.
 			c := getClient(caPath, certPath, keyPath, apihost)
-			log.Println("Attept to provision battlefield with a drone certificate without authentication...")
+			log.Println("Attepmt to provision battlefield with a drone certificate without authentication...")
 			provisioning := client.BattlefieldProvision{
 				Credentials: []client.UserProvision{},
 			}
-			if _, err := c.BattlefieldProvision(context.TODO(), provisioning, addHostHeader(host)); err == nil {
-				log.Printf("Attacker was able to access battlefield provision endpoint without officer certificate using a drone certificate.")
+			if respB, err := c.BattlefieldProvision(context.TODO(), provisioning, addHostHeader(host)); err == nil {
+				if respB.StatusCode == 200 {
+					log.Printf("Attacker was able to access battlefield provision endpoint without officer certificate using a drone certificate.")
+				} else {
+					log.Printf("Attacker blocked: %s", respB.Status)
+				}
 			} else {
 				log.Printf("Attacker blocked: %s", err.Error())
 			}
@@ -247,15 +322,19 @@ func droneAttackBattery(caPath, certPath, keyPath, apihost *string) {
 			// Scenario 2B: Attempt to access pilot endpoints with a drone certificate.
 			// 	Expected: mTLS fails.
 			c := getClient(caPath, certPath, keyPath, apihost)
-			log.Println("Attacker takeover of a drone with a drone certificate without authentication...")
-			_, err := c.SetTargetLocation(
+			log.Println("Attacker attempt to takeover of a drone with a drone certificate without authentication...")
+			respB, err := c.SetTargetLocation(
 				context.TODO(),
 				"drone-1",
 				client.Coordinate{Altitude: 0, Longitude: 0, Latitude: 0},
 				addHostHeader(host),
 			)
 			if err == nil {
-				log.Println("Attacker was able to access a pilot specific endpoint with a drone certificate.")
+				if respB.StatusCode == 200 {
+					log.Println("Attacker was able to access a pilot specific endpoint with a drone certificate.")
+				} else {
+					log.Printf("Attacker blocked: %s", respB.Status)
+				}
 			} else {
 				log.Printf("Attacker blocked: %s", err.Error())
 			}
@@ -292,11 +371,10 @@ func login_cracking(caPath, certPath, keyPath, apihost *string) {
 				if resp.StatusCode == 200 {
 					log.Printf("Attacker was able to Login.")
 				} else {
-					log.Printf(".")
-					//log.Printf("Attacker blocked: %s", resp.Status)
+					log.Printf("Attacker blocked: %s", resp.Status)
 				}
 			} else {
-				//log.Printf("Attacker blocked: %s", err.Error())
+				log.Printf("Attacker blocked: %s", err.Error())
 			}
 		}
 	}
@@ -316,7 +394,7 @@ func main() {
 
 	apihost := flag.String("apihost", "10.101.92.59", "IP for drone API gateway")
 
-	loginCracking := flag.String("crack", "", "Add to enable login bruteforce.")
+	loginCracking := flag.Bool("crack", false, "Add to enable login bruteforce.")
 	flag.Parse()
 
 	log.Println("===============================")
@@ -349,7 +427,7 @@ func main() {
 		apihost,
 	)
 
-	if loginCracking != nil {
+	if *loginCracking {
 		log.Println("=============================")
 		log.Println("= Attacking Login Endpoints =")
 		log.Println("=============================")

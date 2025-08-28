@@ -44,7 +44,6 @@ func moveDroneToTarget(dd *client.DroneData) {
 func main() {
 	fmt.Println("pilot-cli")
 
-
 	caPath := flag.String("ca", "certs/ca.crt", "Path to CA certificate")
 	certPath := flag.String("clientcert", "certs/cert.crt", "Path to client certificate")
 	keyPath := flag.String("clientkey", "certs/cert.key", "Path to client key")
@@ -67,7 +66,7 @@ func main() {
 	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
 		log.Fatal("Failed to append CA cert")
 	}
-	
+
 	pilotState := client.PilotProvisioning{
 		Id:     *pilotid,
 		Drones: []client.DroneData{},
@@ -145,26 +144,30 @@ func main() {
 				if err != nil {
 					log.Println(err)
 				} else {
-					log.Println(string(bdResp.Body))
-					battlefieldData := client.BattlefieldData{}
-					if json.Unmarshal(bdResp.Body, &battlefieldData) != nil {
-						log.Println("Invalid response from API")
+					if bdResp.StatusCode() != 200 {
+						log.Println(bdResp.Status())
 					} else {
-						pilotState.Drones = battlefieldData.Drones
-						if len(pilotState.Drones) == 0 {
-							log.Println("No drones assigned")
+						log.Println(string(bdResp.Body))
+						battlefieldData := client.BattlefieldData{}
+						if json.Unmarshal(bdResp.Body, &battlefieldData) != nil {
+							log.Println("Invalid response from API")
 						} else {
-							if rand.Float32() > 0.5 {
-								// Toss a coint, randomly give orders to one random drone.
-								droneToMove := rand.IntN(len(pilotState.Drones))
-								moveDroneToTarget(&pilotState.Drones[droneToMove])
-								c.SetTargetLocation(
-									context.TODO(),
-									pilotState.Drones[droneToMove].Id,
-									pilotState.Drones[droneToMove].Target,
-									addJwtHeader(authToken),
-									addHostHeader(),
-								)
+							pilotState.Drones = battlefieldData.Drones
+							if len(pilotState.Drones) == 0 {
+								log.Println("No drones assigned")
+							} else {
+								if rand.Float32() > 0.5 {
+									// Toss a coint, randomly give orders to one random drone.
+									droneToMove := rand.IntN(len(pilotState.Drones))
+									moveDroneToTarget(&pilotState.Drones[droneToMove])
+									c.SetTargetLocation(
+										context.TODO(),
+										pilotState.Drones[droneToMove].Id,
+										pilotState.Drones[droneToMove].Target,
+										addJwtHeader(authToken),
+										addHostHeader(),
+									)
+								}
 							}
 						}
 					}

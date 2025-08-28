@@ -17,7 +17,8 @@
   "request": {
     "user": {
 	"id": "officer-1",
-	"role": "officer"
+	"role": "officer",
+	"operation": "set-location"
     }
   }
 }

@@ -2,9 +2,10 @@
 
 set -e
 minikube start --driver=virtualbox
+minikube addons enable metrics-server
 
 # We will install a custom ingress gateway
-istioctl install --set profile=minimal
+istioctl install --set profile=minimal -f topology.yml
 
 # We will use the new Kubernetes Gateway API
 #kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null ||

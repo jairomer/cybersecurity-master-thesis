@@ -168,33 +168,45 @@ func main() {
 				log.Println(err)
 			} else {
 				bdResp, err := client.ParseGetBattlefieldDataResponse(resp)
-				if err != nil {
-					log.Println(err)
-				} else {
-					log.Println(string(bdResp.Body))
-					droneDataArr := client.BattlefieldData{}
-					if err := json.Unmarshal(bdResp.Body, &droneDataArr); err != nil {
-						log.Printf("Invalid response from API: %s\n", err.Error())
+				if bdResp.StatusCode() == 200 {
+					if err != nil {
+						log.Println(err)
 					} else {
-						if len(droneDataArr.Drones) == 0 {
-							log.Println("Unauthorized access or undefined drone")
+						log.Println(string(bdResp.Body))
+						droneDataArr := client.BattlefieldData{}
+						if err := json.Unmarshal(bdResp.Body, &droneDataArr); err != nil {
+							log.Printf("Invalid response from API: %s\n", err.Error())
 						} else {
-							// In this client we are expecting only one drone.
-							droneState.Target = droneDataArr.Drones[0].Target
+							if len(droneDataArr.Drones) == 0 {
+								log.Println("Unauthorized access or undefined drone")
+							} else {
+								// In this client we are expecting only one drone.
+								droneState.Target = droneDataArr.Drones[0].Target
+							}
 						}
 					}
+				} else {
+					log.Println(bdResp.Status())
 				}
 			}
 
 			if !inTargetLocation(&droneState) {
 				moveToTarget(&droneState)
-				c.SetCurrentLocation(
+				bdResp, err := c.SetCurrentLocation(
 					context.TODO(),
 					droneState.Id,
 					droneState.Location,
 					addJwtHeader(authToken),
 					addHostHeader(),
 				)
+				if err != nil {
+					log.Println(err)
+				} else {
+					if bdResp.StatusCode != 200 {
+						log.Println(bdResp.Status)
+					}
+				}
+
 			}
 
 			time.Sleep(2 * time.Second)

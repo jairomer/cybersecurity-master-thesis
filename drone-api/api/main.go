@@ -11,6 +11,20 @@ import (
 	"uc3m.es/drone-api/pkg/api"
 )
 
+// Custom middleware to log XFCC header
+func LogXFCC(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		xfcc := c.Request().Header.Get("X-Forwarded-Client-Cert")
+		log.Println("XFCC Header:", xfcc)
+		v := api.XFCC{Value: xfcc}
+		ctx := context.WithValue(c.Request().Context(), "xfcc", &v)
+		req := c.Request().WithContext(ctx)
+		c.SetRequest(req)
+		// Call the next handler
+		return next(c)
+	}
+}
+
 func main() {
 	server := api.NewServer()
 	e := echo.New()
@@ -34,6 +48,7 @@ func main() {
 		SigningKey: []byte(api.SecretKey),
 	}
 
+	e.Use(LogXFCC)
 	e.Use(echojwt.WithConfig(jwtconfig))
 
 	api.RegisterHandlers(e, api.NewStrictHandler(

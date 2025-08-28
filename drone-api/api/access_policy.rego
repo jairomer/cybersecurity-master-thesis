@@ -7,11 +7,14 @@ default allow = false
 drones[drone] if {
     user := input.request.user.id
     role := input.request.user.role
+    op := input.request.user.operation
 
     p := input.battlefield.pilots[_]
 
     role == "drone"
     p.drones[_] == user
+    # Allowed operations
+    op == {"get-target", "set-location", "get-battlefield"}[_]
     drone := user
 }
 
@@ -19,10 +22,13 @@ drones[drone] if {
 drones[drone] if {
     user := input.request.user.id
     role := input.request.user.role
+    op := input.request.user.operation
 
     role == "pilot"
     p := input.battlefield.pilots[_]
     p.id == user
+    # Allowed operations
+    op == {"set-target", "get-battlefield"}[_]
     drone := p.drones[_]
 }
 
@@ -30,9 +36,12 @@ drones[drone] if {
 drones[drone] if {
     user := input.request.user.id
     role := input.request.user.role
+    op := input.request.user.operation
 
     role == "officer"
     p = input.battlefield.pilots[_]
+    # Allowed operations
+    op == {"get-battlefield", "provisioning"}[_]
     drone := p.drones[_]
 }
 

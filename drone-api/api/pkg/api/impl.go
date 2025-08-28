@@ -5,6 +5,7 @@ import (
 	"crypto/sha512"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/open-policy-agent/opa/v1/rego"
@@ -14,6 +15,33 @@ const (
 	SALT = "saltysalt!"
 )
 
+type XFCC struct {
+	Value string
+	role  string
+}
+
+func (xfcc *XFCC) GetClientRole() *string {
+	if xfcc.role != "" {
+		return &xfcc.role
+	}
+	index := strings.Index(xfcc.Value, "officer.drone.api")
+	if index != -1 {
+		xfcc.role = "officer"
+		return &xfcc.role
+	}
+	index = strings.Index(xfcc.Value, "pilot.drone.api")
+	if index != -1 {
+		xfcc.role = "pilot"
+		return &xfcc.role
+	}
+	index = strings.Index(xfcc.Value, "cli.drone.api")
+	if index != -1 {
+		xfcc.role = "drone"
+		return &xfcc.role
+	}
+	return nil
+}
+
 type UserDatabase struct {
 	Officers map[string]string
 	Pilots   map[string]string
@@ -21,12 +49,22 @@ type UserDatabase struct {
 }
 
 type AuthorizationDecision struct {
-	user    string
-	role    string
-	uri     string
-	drones  []string
-	allowed bool
+	user      string
+	role      string
+	uri       string
+	operation string
+	drones    []string
+	allowed   bool
 }
+
+const (
+	operationSetTarget      = "set-target"
+	operationGetTarget      = "get-target"
+	operationSetLocation    = "set-location"
+	operationGetLocation    = "get-location"
+	operationProvisioning   = "provisioning"
+	operationGetBattelfield = "get-battlefield"
+)
 
 type Server struct {
 	Users  UserDatabase
@@ -52,7 +90,7 @@ func NewServer() Server {
 }
 
 func (s *Server) GetBattlefieldData(ctx context.Context, request GetBattlefieldDataRequestObject) (GetBattlefieldDataResponseObject, error) {
-	authzDecision, err := s.authorized(ctx)
+	authzDecision, err := s.authorized(ctx, operationGetBattelfield)
 	if err != nil {
 		log.Printf("Error running authorization at %s by user %s", authzDecision.uri, authzDecision.user)
 		return GetBattlefieldData403Response{}, nil
@@ -76,7 +114,7 @@ func (s *Server) GetBattlefieldData(ctx context.Context, request GetBattlefieldD
 }
 
 func (s *Server) SetCurrentLocation(ctx context.Context, request SetCurrentLocationRequestObject) (SetCurrentLocationResponseObject, error) {
-	authzDecision, err := s.authorized(ctx)
+	authzDecision, err := s.authorized(ctx, operationSetLocation)
 	if err != nil {
 		log.Printf("Error running authorization at %s by user %s", authzDecision.uri, authzDecision.user)
 		return SetCurrentLocation403Response{}, nil
@@ -97,7 +135,7 @@ func (s *Server) SetCurrentLocation(ctx context.Context, request SetCurrentLocat
 }
 
 func (s *Server) SetTargetLocation(ctx context.Context, request SetTargetLocationRequestObject) (SetTargetLocationResponseObject, error) {
-	authzDecision, err := s.authorized(ctx)
+	authzDecision, err := s.authorized(ctx, operationSetTarget)
 	if err != nil {
 		log.Printf("Error running authorization at %s by user %s", authzDecision.uri, authzDecision.user)
 		return SetTargetLocation403Response{}, nil
@@ -269,16 +307,18 @@ func (s *Server) populateAuthzData(ctx context.Context, authzDecision *Authoriza
 		},
 		"request": map[string]interface{}{
 			"user": map[string]string{
-				"id":   authzDecision.user,
-				"role": authzDecision.role,
+				"id":        authzDecision.user,
+				"role":      authzDecision.role,
+				"operation": authzDecision.operation,
 			},
 		},
 	}
 }
 
-func (s *Server) authorized(ctx context.Context) (*AuthorizationDecision, error) {
+func (s *Server) authorized(ctx context.Context, operation string) (*AuthorizationDecision, error) {
 	authzDecision := AuthorizationDecision{}
 	authzDecision.allowed = false
+	authzDecision.operation = operation
 	jwtStr := ctx.Value("jwt").(string)
 	if jwtStr == "" {
 		log.Fatal("JWT received nil or emtpy from context")
@@ -288,6 +328,8 @@ func (s *Server) authorized(ctx context.Context) (*AuthorizationDecision, error)
 	if authzDecision.uri == "" {
 		log.Fatal("URI received nil or emtpy from context")
 	}
+
+	xfcc := ctx.Value("xfcc").(*XFCC)
 
 	token, err := jwt.ParseWithClaims(jwtStr, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(SecretKey), nil
@@ -300,6 +342,12 @@ func (s *Server) authorized(ctx context.Context) (*AuthorizationDecision, error)
 		authzDecision.user = claims.ID
 		if authzDecision.role, err = s.getRole(claims.ID); err != nil {
 			return nil, err
+		}
+		clientRole := xfcc.GetClientRole()
+		if authzDecision.role != *clientRole {
+			log.Printf("User authenticated as '%s' but using certificate for '%s' detected, unauthorized.\n", authzDecision.role, *clientRole)
+			authzDecision.allowed = false
+			return &authzDecision, nil
 		}
 		data := s.populateAuthzData(ctx, &authzDecision)
 		query, err := rego.New(
