@@ -203,6 +203,7 @@ func (s *Server) authenticate(user, password string) bool {
 		log.Printf("Failed to autenticate: user '%s' not found\n", user)
 	}
 	if hsh == string(hash.Sum(nil)) {
+		log.Printf("User %s has been authenticated successfully.\n", user)
 		return true
 	}
 	log.Printf("Failed to authenticate:  user '%s' presented invalid credentials\n", user)
@@ -221,9 +222,10 @@ func (s *Server) Login(ctx context.Context, request LoginRequestObject) (LoginRe
 		request.Body.Password = "" // clear it asap
 		token, err := GenerateToken(request.Body.User)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Error: %s\n", err.Error())
 			return Login401Response{}, err
 		}
+		log.Printf("Login successful")
 		return Login200JSONResponse{Token: token}, nil
 	}
 	log.Printf("User %s has failed authentication\n", evaluatedUser)
@@ -300,7 +302,6 @@ func (s *Server) authorized(ctx context.Context) (*AuthorizationDecision, error)
 			return nil, err
 		}
 		data := s.populateAuthzData(ctx, &authzDecision)
-		// TODO: Use environment variable instead of hardcoded relative path.
 		query, err := rego.New(
 			rego.Query("data.battlefield.authz"),
 			rego.Load([]string{"./access_policy.rego"}, nil),
@@ -318,7 +319,7 @@ func (s *Server) authorized(ctx context.Context) (*AuthorizationDecision, error)
 		}
 		authz := results[0].Expressions[0].Value.(map[string]interface{})
 
-		log.Println(authz)
+		log.Printf("Authorization result for user %s: %s", authzDecision.user, authz)
 
 		authzDecision.allowed = authz["allow"].(bool)
 		drones := authz["drones"].(map[string]interface{})
