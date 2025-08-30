@@ -82,6 +82,12 @@ spec:
           limits:
             cpu: "1000m"      # Hard cap at 0.5 vCPU
             memory: "512Mi"  # Hard cap at 512 MB RAM
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
