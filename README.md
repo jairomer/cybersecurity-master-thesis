@@ -10,7 +10,7 @@
     - `pilot-cli/` - Pilot REST API Client 
   - `k8s/` - Assets to be deployed on the cluster
     - `certs/` - Certificates and certificate generation scripts
-    -  install.sh - Installation script
+    - `install.sh` - Installation script
   - `Makefile`  - Application development workflow
   - `openapi.yaml`  - OpenAPI specification of the REST API
 - `/pocs` - Proofs of concept made along the way.
