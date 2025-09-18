@@ -1,6 +1,9 @@
 #!/bin/sh
 
 set -e
+
+sudo modprobe -r kvm_amd kvm
+
 minikube start --driver=virtualbox
 minikube addons enable metrics-server
 
